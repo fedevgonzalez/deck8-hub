@@ -32,16 +32,18 @@ export function KeyAssignmentView({
   return (
     <div className="flex flex-1 min-h-0 items-center justify-center">
       <div className="flex flex-col items-center gap-4">
-        <KeyGrid
-          keys={keys}
-          editSlot={editSlot}
-          selectedKey={selectedKey}
-          onSelectKey={handleKeyClick}
-          mode="keycode"
-          keycodeLabels={keycodeLabels}
-        />
+        <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
+          <KeyGrid
+            keys={keys}
+            editSlot={editSlot}
+            selectedKey={selectedKey}
+            onSelectKey={handleKeyClick}
+            mode="keycode"
+            keycodeLabels={keycodeLabels}
+          />
+        </div>
         {!connected && (
-          <div className="text-[10px] text-muted-foreground/50">
+          <div className="text-[10px] text-muted-foreground/60 font-medium">
             Connect device to read/write key assignments
           </div>
         )}

@@ -35,6 +35,15 @@ export function hsvToRgb(h: number, s: number, v: number): string {
 }
 
 /**
+ * Convert QMK-style HSV (0-255 each) to hex string (e.g. "#FF00AA").
+ */
+export function hsvToHex(h: number, s: number, v: number): string {
+  const rgb = hsvToRgb(h, s, v);
+  const match = rgb.match(/\d+/g)!;
+  return `#${match.map((c) => Number(c).toString(16).padStart(2, "0")).join("").toUpperCase()}`;
+}
+
+/**
  * Build a CSS linear-gradient for the saturation slider given a hue (0-255).
  */
 export function satGradient(h: number): string {

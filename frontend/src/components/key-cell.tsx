@@ -34,17 +34,23 @@ export function KeyCell({
       type="button"
       className={cn(
         "flex flex-col items-center justify-center gap-1",
-        "w-[70px] h-[70px] rounded-lg cursor-pointer",
+        "w-20 h-20 rounded-lg cursor-pointer",
         "transition-all duration-100",
         "border",
+        "shadow-[inset_0_1px_2px_rgba(0,0,0,0.3)]",
         isSelected
           ? "border-white/50 key-selected"
-          : "border-white/[0.06] hover:border-white/20",
+          : "border-white/[0.08] hover:border-white/[0.20] hover:scale-[1.02]",
         overrideDisabled && "key-stripes",
       )}
       style={
         isColorMode && !overrideDisabled
-          ? { backgroundColor: bgColor }
+          ? {
+              backgroundColor: bgColor,
+              boxShadow: isSelected
+                ? undefined
+                : `inset 0 1px 2px rgba(0,0,0,0.3), 0 4px 12px -4px ${bgColor}40`,
+            }
           : !isColorMode
             ? { backgroundColor: "rgba(255,255,255,0.04)" }
             : undefined
@@ -62,15 +68,15 @@ export function KeyCell({
             <div className="flex gap-1">
               <span
                 className={cn(
-                  "w-1.5 h-1.5 rounded-full border",
-                  editSlot === "A" ? "border-white/60" : "border-white/20",
+                  "w-2 h-2 rounded-full border transition-transform",
+                  editSlot === "A" ? "border-white/60 scale-110" : "border-white/20",
                 )}
                 style={{ backgroundColor: colorA }}
               />
               <span
                 className={cn(
-                  "w-1.5 h-1.5 rounded-full border",
-                  editSlot === "B" ? "border-white/60" : "border-white/20",
+                  "w-2 h-2 rounded-full border transition-transform",
+                  editSlot === "B" ? "border-white/60 scale-110" : "border-white/20",
                 )}
                 style={{ backgroundColor: colorB }}
               />

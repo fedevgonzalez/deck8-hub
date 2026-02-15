@@ -85,11 +85,9 @@ export function KeyEditorDialog({
     [newKeycode],
   );
 
-  const keycodes = getKeycodesByCategory(category);
-
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md backdrop-blur-xl bg-black/95 border-white/[0.15] animate-scale-in">
         <DialogHeader>
           <DialogTitle className="text-sm">
             Edit Key {keyIndex + 1}
@@ -99,7 +97,7 @@ export function KeyEditorDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {/* Current → New display */}
+        {/* Current -> New display */}
         <div className="flex items-center justify-center gap-3 py-2">
           <KeycodeChip label={keycodeToLabel(currentKeycode)} muted />
           <span className="text-muted-foreground text-xs">&rarr;</span>
@@ -113,10 +111,10 @@ export function KeyEditorDialog({
               key={mod}
               type="button"
               className={cn(
-                "px-2.5 py-1 rounded text-[10px] font-medium border transition-all",
+                "px-3 py-1.5 rounded-lg text-[10px] font-semibold border transition-all duration-100",
                 decomposed[mod]
-                  ? "bg-white text-black border-white/40"
-                  : "bg-transparent text-muted-foreground border-white/10 hover:border-white/20",
+                  ? "bg-white text-black border-white/40 scale-105"
+                  : "bg-transparent text-muted-foreground border-white/[0.08] hover:border-white/[0.20] hover:text-foreground",
               )}
               onClick={() => toggleMod(mod)}
             >
@@ -127,16 +125,16 @@ export function KeyEditorDialog({
 
         {/* Category tabs + virtual keyboard grid */}
         <Tabs value={category} onValueChange={(v) => setCategory(v as KeycodeCategory)}>
-          <TabsList className="w-full">
+          <TabsList className="w-full bg-white/[0.04] border border-white/[0.08]">
             {CATEGORIES.map((cat) => (
-              <TabsTrigger key={cat.id} value={cat.id} className="text-[10px]">
+              <TabsTrigger key={cat.id} value={cat.id} className="text-[10px] data-[state=active]:font-semibold">
                 {cat.label}
               </TabsTrigger>
             ))}
           </TabsList>
           {CATEGORIES.map((cat) => (
             <TabsContent key={cat.id} value={cat.id}>
-              <div className="grid grid-cols-6 gap-1 max-h-[200px] overflow-y-auto p-1">
+              <div className="grid grid-cols-6 gap-1.5 max-h-[200px] overflow-y-auto p-1.5 rounded-lg bg-white/[0.02]">
                 {getKeycodesByCategory(cat.id).map((kc) => (
                   <VirtualKey
                     key={kc.code}
@@ -151,12 +149,12 @@ export function KeyEditorDialog({
         </Tabs>
 
         <DialogFooter>
-          <Button variant="ghost" size="sm" className="text-xs" onClick={onClose}>
+          <Button variant="ghost" size="sm" className="text-xs transition-smooth" onClick={onClose}>
             Cancel
           </Button>
           <Button
             size="sm"
-            className="text-xs"
+            className="text-xs transition-smooth"
             onClick={() => {
               onSave(newKeycode);
               onClose();
@@ -174,10 +172,10 @@ function KeycodeChip({ label, muted }: { label: string; muted?: boolean }) {
   return (
     <span
       className={cn(
-        "px-3 py-1.5 rounded-md text-xs font-medium border min-w-[60px] text-center",
+        "px-4 py-2 rounded-lg text-xs font-semibold border min-w-[60px] text-center",
         muted
-          ? "bg-white/[0.03] border-white/10 text-muted-foreground"
-          : "bg-white/10 border-white/20 text-foreground",
+          ? "bg-white/[0.03] border-white/[0.08] text-muted-foreground"
+          : "bg-white/10 border-white/[0.20] text-foreground",
       )}
     >
       {label}
@@ -198,11 +196,11 @@ function VirtualKey({
     <button
       type="button"
       className={cn(
-        "py-1.5 rounded text-[9px] font-medium border transition-all truncate",
+        "py-1.5 rounded-md text-[9px] font-semibold border transition-all truncate shadow-sm",
         def.wide ? "col-span-2 px-2" : "px-1",
         isActive
-          ? "bg-white text-black border-white/50"
-          : "bg-white/[0.03] text-muted-foreground border-white/[0.06] hover:border-white/15 hover:text-foreground",
+          ? "bg-white text-black border-white/50 scale-105"
+          : "bg-white/[0.03] text-muted-foreground border-white/[0.06] hover:border-white/[0.15] hover:text-foreground",
       )}
       onClick={onClick}
       title={def.label}

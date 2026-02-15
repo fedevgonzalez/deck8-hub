@@ -19,7 +19,7 @@ export function KeyGrid({
   keycodeLabels,
 }: KeyGridProps) {
   return (
-    <div className="grid grid-cols-4 gap-1.5" style={{ width: "296px" }}>
+    <div className="grid grid-cols-4 gap-2" style={{ width: "344px" }}>
       {keys.map((config, i) => (
         <KeyCell
           key={i}

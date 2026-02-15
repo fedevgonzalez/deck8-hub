@@ -42,17 +42,17 @@ export default function App() {
         {/* Main content with tabs */}
         <Tabs defaultValue="keys" className="flex flex-col flex-1 min-h-0">
           <div className="px-4 pt-2">
-            <TabsList>
-              <TabsTrigger value="keys" className="text-[11px]">
+            <TabsList className="bg-white/[0.04] border border-white/[0.08]">
+              <TabsTrigger value="keys" className="text-[11px] data-[state=active]:font-semibold">
                 Key Assignment
               </TabsTrigger>
-              <TabsTrigger value="color" className="text-[11px]">
+              <TabsTrigger value="color" className="text-[11px] data-[state=active]:font-semibold">
                 Color
               </TabsTrigger>
             </TabsList>
           </div>
 
-          <TabsContent value="keys" className="flex-1 min-h-0">
+          <TabsContent value="keys" className="flex-1 min-h-0 animate-fade-in">
             <KeyAssignmentView
               keys={state.keys}
               keymaps={state.keymaps}
@@ -62,7 +62,7 @@ export default function App() {
             />
           </TabsContent>
 
-          <TabsContent value="color" className="flex-1 min-h-0">
+          <TabsContent value="color" className="flex-1 min-h-0 animate-fade-in">
             <ColorView
               keys={state.keys}
               editSlot={editSlot}

@@ -1,5 +1,5 @@
 import { Slider } from "@/components/ui/slider";
-import { hsvToRgb, satGradient, valGradient } from "@/lib/hsv";
+import { hsvToRgb, hsvToHex, satGradient, valGradient } from "@/lib/hsv";
 import type { ActiveSlot, HsvColor } from "@/lib/tauri";
 
 interface ColorPickerProps {
@@ -16,14 +16,18 @@ export function ColorPicker({
   onChange,
 }: ColorPickerProps) {
   const previewColor = hsvToRgb(color.h, color.s, color.v);
+  const hexColor = hsvToHex(color.h, color.s, color.v);
 
   return (
     <div className="space-y-5">
       {/* Preview + info */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-4">
         <div
-          className="w-12 h-12 rounded-lg border border-white/10 shrink-0 transition-colors duration-75"
-          style={{ backgroundColor: previewColor }}
+          className="w-16 h-16 rounded-xl border-2 border-white/[0.12] shrink-0 transition-colors duration-75"
+          style={{
+            backgroundColor: previewColor,
+            boxShadow: `0 4px 16px -4px ${previewColor}50`,
+          }}
         />
         <div className="min-w-0">
           <div className="text-xs text-foreground font-medium">
@@ -31,6 +35,9 @@ export function ColorPicker({
           </div>
           <div className="text-[10px] text-muted-foreground tabular-nums mt-0.5">
             {color.h} / {color.s} / {color.v}
+          </div>
+          <div className="text-[10px] text-white/60 tabular-nums mt-0.5 font-medium">
+            {hexColor}
           </div>
         </div>
       </div>
@@ -77,7 +84,7 @@ function SliderRow({
 }) {
   return (
     <div className="flex items-center gap-3">
-      <span className="text-[10px] text-muted-foreground w-3 shrink-0">{label}</span>
+      <span className="text-[11px] font-semibold text-muted-foreground w-3 shrink-0">{label}</span>
       <div className={`flex-1 ${className ?? ""}`} style={style}>
         <Slider
           min={0}
@@ -87,7 +94,7 @@ function SliderRow({
           onValueChange={([v]) => onChange(v)}
         />
       </div>
-      <span className="text-[10px] text-foreground tabular-nums w-7 text-right shrink-0">{value}</span>
+      <span className="text-[10px] text-white/80 tabular-nums w-8 text-right shrink-0">{value}</span>
     </div>
   );
 }
