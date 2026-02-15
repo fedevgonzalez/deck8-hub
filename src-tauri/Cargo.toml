@@ -1,0 +1,21 @@
+[package]
+name = "deck8-hub"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "deck8_hub"
+crate-type = ["rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-global-shortcut = "2"
+hidapi = { version = "2.6", features = ["windows-native"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1.0"
+log = "0.4"
+dirs = "6"
