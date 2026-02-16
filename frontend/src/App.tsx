@@ -22,7 +22,6 @@ export default function App() {
     toggleKeyOverride,
     toggleKeySlot,
     saveCustom,
-    restoreDefaults,
     updateRgb,
     updateRgbColor,
     saveRgb,
