@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -34,9 +34,13 @@ export function ColorEditorDialog({
   onClose,
 }: ColorEditorDialogProps) {
   const [slot, setSlot] = useState<ActiveSlot>(editSlot);
+  const didAutoEnable = useRef(false);
 
   useEffect(() => {
-    if (open) setSlot(editSlot);
+    if (open) {
+      setSlot(editSlot);
+      didAutoEnable.current = false;
+    }
   }, [open, editSlot]);
 
   const color = slot === "A" ? config.slot_a : config.slot_b;
@@ -45,8 +49,9 @@ export function ColorEditorDialog({
 
   const handleColorChange = useCallback(
     (h: number, s: number, v: number) => {
-      // Auto-enable override on first color interaction
-      if (!config.override_enabled) {
+      // Auto-enable override once per dialog open
+      if (!config.override_enabled && !didAutoEnable.current) {
+        didAutoEnable.current = true;
         onToggleOverride(keyIndex);
       }
       onColorChange(keyIndex, slot, h, s, v);
@@ -64,6 +69,7 @@ export function ColorEditorDialog({
 
   const handleResetToDevice = () => {
     if (config.override_enabled) {
+      didAutoEnable.current = false;
       onToggleOverride(keyIndex);
     }
   };
