@@ -20,6 +20,7 @@ import {
   type KeycodeDef,
 } from "@/lib/keycodes";
 import { cn } from "@/lib/utils";
+import { Trash2 } from "lucide-react";
 
 interface KeyEditorDialogProps {
   open: boolean;
@@ -141,17 +142,28 @@ export function KeyEditorDialog({
           ))}
         </Tabs>
 
-        <DialogFooter>
-          <Button variant="ghost" size="sm" className="text-xs text-white/40" onClick={onClose}>
-            Cancel
-          </Button>
+        <DialogFooter className="flex justify-between">
           <Button
+            variant="ghost"
             size="sm"
-            className="text-xs font-semibold"
-            onClick={() => { onSave(newKeycode); onClose(); }}
+            className="text-xs text-white/25 hover:text-red-400/70 hover:bg-red-500/[0.06] gap-1.5"
+            onClick={() => { onSave(0x0000); onClose(); }}
           >
-            Save
+            <Trash2 className="w-3 h-3" />
+            Clear
           </Button>
+          <div className="flex gap-2">
+            <Button variant="ghost" size="sm" className="text-xs text-white/40" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              className="text-xs font-semibold"
+              onClick={() => { onSave(newKeycode); onClose(); }}
+            >
+              Save
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

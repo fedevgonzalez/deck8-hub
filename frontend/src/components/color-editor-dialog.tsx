@@ -69,9 +69,16 @@ export function ColorEditorDialog({
     }
   };
 
+  const handleClose = useCallback(() => {
+    setSlot("A");
+    setToggleMode(false);
+    onClose();
+  }, [onClose]);
+
   const handleToggleModeChange = () => {
     if (!toggleMode) {
-      // Turning ON: keep current colors as-is for independent editing
+      // Turning ON: start on the current active slot so the picker shows the right color
+      setSlot(editSlot);
       setToggleMode(true);
     } else {
       // Turning OFF: sync both slots to match slot A
@@ -83,7 +90,7 @@ export function ColorEditorDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+    <Dialog open={open} onOpenChange={(v) => !v && handleClose()}>
       <DialogContent className="max-w-sm bg-[#111113] border-white/12 animate-scale-in">
         <DialogHeader>
           <DialogTitle className="text-sm font-bold flex items-center gap-2">
@@ -253,7 +260,7 @@ export function ColorEditorDialog({
             variant="ghost"
             size="sm"
             className="text-[11px] text-white/35 hover:text-white/70 hover:bg-white/[0.06] h-7 px-3 gap-1.5 transition-smooth font-medium rounded-md"
-            onClick={onClose}
+            onClick={handleClose}
           >
             <X className="w-3 h-3" />
             Close
