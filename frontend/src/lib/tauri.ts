@@ -36,7 +36,6 @@ export interface StateSnapshot {
   connected: boolean;
   keys: KeyConfig[];
   active_slot: ActiveSlot;
-  current_profile_name: string | null;
   keymaps: number[];
   device_info: DeviceInfo | null;
   rgb_matrix: RgbMatrixState | null;
@@ -93,26 +92,6 @@ export function applyColors(): Promise<void> {
 export function disableAllOverrides(): Promise<void> {
   if (!isTauri) return Promise.resolve();
   return tauriInvoke("disable_all_overrides");
-}
-
-export function listProfiles(): Promise<string[]> {
-  if (!isTauri) return Promise.resolve(["demo-profile"]);
-  return tauriInvoke<string[]>("list_profiles");
-}
-
-export function saveProfile(name: string): Promise<void> {
-  if (!isTauri) return Promise.resolve();
-  return tauriInvoke("save_profile", { name });
-}
-
-export function loadProfile(name: string): Promise<StateSnapshot> {
-  if (!isTauri) return Promise.reject(`Cannot load "${name}" outside Tauri`);
-  return tauriInvoke<StateSnapshot>("load_profile", { name });
-}
-
-export function deleteProfile(name: string): Promise<void> {
-  if (!isTauri) return Promise.resolve();
-  return tauriInvoke("delete_profile", { name });
 }
 
 export function getKeymap(): Promise<number[]> {

@@ -450,64 +450,6 @@ fn restore_defaults(state: State<SharedState>) -> Result<StateSnapshot, String> 
     Ok(st.snapshot())
 }
 
-#[tauri::command]
-fn list_profiles() -> Result<Vec<String>, String> {
-    profile::list_profiles().map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn save_profile(state: State<SharedState>, name: String) -> Result<(), String> {
-    let mut st = state.lock().unwrap();
-    profile::save_profile(&name, &st.keys, &st.keymaps).map_err(|e| e.to_string())?;
-    st.current_profile_name = Some(name);
-    Ok(())
-}
-
-#[tauri::command]
-fn load_profile(state: State<SharedState>, name: String) -> Result<StateSnapshot, String> {
-    let mut st = state.lock().unwrap();
-    let prof = profile::load_profile(&name).map_err(|e| e.to_string())?;
-    // Apply profile keys (handle profiles with fewer/more than 8 keys)
-    for (i, kc) in prof.keys.iter().enumerate() {
-        if i < 8 {
-            st.keys[i] = kc.clone();
-        }
-    }
-    // Restore keymaps if present in profile
-    if let Some(ref keymaps) = prof.keymaps {
-        for (i, &kc) in keymaps.iter().enumerate() {
-            if i < 8 {
-                st.keymaps[i] = kc;
-            }
-        }
-        // Write keymaps to device
-        if let Some(ref dev) = st.device {
-            for i in 0..8u8 {
-                let (row, col) = protocol::key_index_to_matrix(i);
-                let _ = dev.set_keycode(0, row, col, st.keymaps[i as usize]);
-            }
-        }
-    }
-    st.current_profile_name = Some(name);
-    // Apply colors to device
-    if let Some(ref dev) = st.device {
-        apply_all_to_device(dev, &st.keys);
-        let _ = dev.custom_save();
-    }
-    persist_keys(&st.keys);
-    Ok(st.snapshot())
-}
-
-#[tauri::command]
-fn delete_profile(state: State<SharedState>, name: String) -> Result<(), String> {
-    profile::delete_profile(&name).map_err(|e| e.to_string())?;
-    let mut st = state.lock().unwrap();
-    if st.current_profile_name.as_deref() == Some(&name) {
-        st.current_profile_name = None;
-    }
-    Ok(())
-}
-
 // ── Device info & control commands ───────────────────────────────────────
 
 #[tauri::command]
@@ -866,10 +808,6 @@ pub fn run() {
             set_keycode,
             set_key_override,
             restore_defaults,
-            list_profiles,
-            save_profile,
-            load_profile,
-            delete_profile,
             get_device_info,
             device_indication,
             bootloader_jump,

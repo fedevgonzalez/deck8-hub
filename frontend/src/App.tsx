@@ -16,7 +16,6 @@ export default function App() {
     state,
     selectedKey,
     setSelectedKey,
-    profiles,
     connect,
     updateKeyColor,
     updateKeycode,
@@ -24,9 +23,6 @@ export default function App() {
     toggleKeySlot,
     saveCustom,
     restoreDefaults,
-    loadProfile,
-    saveProfile,
-    deleteProfile,
     updateRgb,
     updateRgbColor,
     saveRgb,
@@ -47,16 +43,10 @@ export default function App() {
 
         {/* Main content with tabs — Toolbar is inside Tabs so TabsList works */}
         <Tabs defaultValue="keys" className="flex flex-col flex-1 min-h-0 !gap-0">
-          {/* Unified toolbar: brand + tabs + slot controls + profile + connection */}
+          {/* Unified toolbar: brand + tabs + connection */}
           <Toolbar
             connected={state.connected}
             onReconnect={connect}
-            profiles={profiles}
-            currentProfile={state.current_profile_name}
-            onLoad={loadProfile}
-            onSave={saveProfile}
-            onDelete={deleteProfile}
-            onRestoreDefaults={restoreDefaults}
           />
 
           <TabsContent value="keys" className="flex flex-col flex-1 min-h-0 overflow-hidden animate-fade-in">

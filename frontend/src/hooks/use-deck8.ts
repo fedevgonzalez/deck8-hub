@@ -5,10 +5,6 @@ import {
   connectDevice,
   getState,
   setKeyColor,
-  listProfiles,
-  saveProfile,
-  loadProfile,
-  deleteProfile,
   onSlotToggled,
   onStateUpdated,
   toggleKeySlot as ipcToggleKeySlot,
@@ -37,7 +33,6 @@ const DEFAULT_STATE: StateSnapshot = {
     active_slot: "A" as const,
   })),
   active_slot: "A",
-  current_profile_name: null,
   keymaps: [0, 0, 0, 0, 0, 0, 0, 0],
   device_info: null,
   rgb_matrix: null,
@@ -46,7 +41,6 @@ const DEFAULT_STATE: StateSnapshot = {
 export function useDeck8() {
   const [state, setState] = useState<StateSnapshot>(DEFAULT_STATE);
   const [selectedKey, setSelectedKey] = useState<number | null>(null);
-  const [profiles, setProfiles] = useState<string[]>([]);
   const colorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rgbTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -56,15 +50,6 @@ export function useDeck8() {
     try {
       const s = await getState();
       setState(s);
-    } catch {
-      // Expected to fail outside Tauri
-    }
-  }, []);
-
-  const refreshProfiles = useCallback(async () => {
-    try {
-      const list = await listProfiles();
-      setProfiles(list);
     } catch {
       // Expected to fail outside Tauri
     }
@@ -205,54 +190,6 @@ export function useDeck8() {
     }
   }, []);
 
-  const doLoadProfile = useCallback(
-    async (name: string) => {
-      try {
-        const snapshot = await loadProfile(name);
-        setState(snapshot);
-        await refreshProfiles();
-        toast.success(`Loaded "${name}"`);
-      } catch (e) {
-        toast.error(`Load failed: ${e}`);
-      }
-    },
-    [refreshProfiles],
-  );
-
-  const doSaveProfile = useCallback(
-    async (name: string) => {
-      try {
-        await saveProfile(name);
-        setState((prev) => ({ ...prev, current_profile_name: name }));
-        await refreshProfiles();
-        toast.success(`Saved "${name}"`);
-      } catch (e) {
-        toast.error(`Save failed: ${e}`);
-      }
-    },
-    [refreshProfiles],
-  );
-
-  const doDeleteProfile = useCallback(
-    async (name: string) => {
-      try {
-        await deleteProfile(name);
-        setState((prev) => ({
-          ...prev,
-          current_profile_name:
-            prev.current_profile_name === name
-              ? null
-              : prev.current_profile_name,
-        }));
-        await refreshProfiles();
-        toast.success(`Deleted "${name}"`);
-      } catch (e) {
-        toast.error(`Delete failed: ${e}`);
-      }
-    },
-    [refreshProfiles],
-  );
-
   // ── Device info & control actions ──────────────────────
 
   const doDeviceIndication = useCallback(async () => {
@@ -361,7 +298,6 @@ export function useDeck8() {
   useEffect(() => {
     // Silent auto-connect — no toast on failure
     connect(true);
-    refreshProfiles();
 
     // Global toggle (tray menu "Toggle LEDs")
     const unlistenGlobal = onSlotToggled((newSlot) => {
@@ -393,7 +329,6 @@ export function useDeck8() {
     state,
     selectedKey,
     setSelectedKey,
-    profiles,
     connect: () => connect(false),
     updateKeyColor,
     updateKeycode,
@@ -401,9 +336,6 @@ export function useDeck8() {
     toggleKeySlot: doToggleKeySlot,
     saveCustom: doSaveCustom,
     restoreDefaults: doRestoreDefaults,
-    loadProfile: doLoadProfile,
-    saveProfile: doSaveProfile,
-    deleteProfile: doDeleteProfile,
     deviceIndication: doDeviceIndication,
     bootloaderJump: doBootloaderJump,
     eepromReset: doEepromReset,
