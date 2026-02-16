@@ -50,8 +50,8 @@ pub struct AppState {
     pub keymaps: [u16; 8],
     pub device_info: Option<DeviceInfo>,
     pub rgb_matrix: Option<RgbMatrixState>,
-    /// Maps registered shortcut string → key index (0..7)
-    pub shortcut_map: HashMap<String, usize>,
+    /// Maps shortcut display string → (LED index, QMK keycode, register string)
+    pub shortcut_map: HashMap<String, (usize, u16, String)>,
 }
 
 impl Default for AppState {

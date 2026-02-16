@@ -84,6 +84,61 @@ fn qmk_keycode_to_display(keycode: u16) -> Option<String> {
     Some(parts.join("+"))
 }
 
+/// Simulate a QMK keycode as a real keystroke via enigo.
+/// This replays the shortcut to the OS so the focused application receives it.
+fn simulate_qmk_keystroke(keycode: u16) {
+    use enigo::{Direction, Enigo, Key, Keyboard, Settings};
+
+    let mods = (keycode >> 8) as u8;
+    let basic = (keycode & 0xFF) as u8;
+
+    let mut enigo = match Enigo::new(&Settings::default()) {
+        Ok(e) => e,
+        Err(e) => {
+            error!("[replay] Failed to create Enigo: {}", e);
+            return;
+        }
+    };
+
+    // Press modifiers
+    if mods & 0x11 != 0 { let _ = enigo.key(Key::Control, Direction::Press); }
+    if mods & 0x22 != 0 { let _ = enigo.key(Key::Shift, Direction::Press); }
+    if mods & 0x44 != 0 { let _ = enigo.key(Key::Alt, Direction::Press); }
+    if mods & 0x88 != 0 { let _ = enigo.key(Key::Meta, Direction::Press); }
+
+    // Press+release the base key
+    let key = match basic {
+        0x04..=0x1D => Some(Key::Unicode((b'a' + (basic - 0x04)) as char)),
+        0x1E..=0x26 => Some(Key::Unicode((b'1' + (basic - 0x1E)) as char)),
+        0x27 => Some(Key::Unicode('0')),
+        0x28 => Some(Key::Return),
+        0x29 => Some(Key::Escape),
+        0x2C => Some(Key::Space),
+        0x3A => Some(Key::F1),
+        0x3B => Some(Key::F2),
+        0x3C => Some(Key::F3),
+        0x3D => Some(Key::F4),
+        0x3E => Some(Key::F5),
+        0x3F => Some(Key::F6),
+        0x40 => Some(Key::F7),
+        0x41 => Some(Key::F8),
+        0x42 => Some(Key::F9),
+        0x43 => Some(Key::F10),
+        0x44 => Some(Key::F11),
+        0x45 => Some(Key::F12),
+        _ => None,
+    };
+    if let Some(k) = key {
+        let _ = enigo.key(k, Direction::Click);
+    }
+
+    // Release modifiers (reverse order)
+    if mods & 0x88 != 0 { let _ = enigo.key(Key::Meta, Direction::Release); }
+    if mods & 0x44 != 0 { let _ = enigo.key(Key::Alt, Direction::Release); }
+    if mods & 0x22 != 0 { let _ = enigo.key(Key::Shift, Direction::Release); }
+    if mods & 0x11 != 0 { let _ = enigo.key(Key::Control, Direction::Release); }
+}
+
 /// Convert keymap index (matrix-order) to LED index (snake-wired).
 /// Top row: key 0-3 → LED 0-3 (direct)
 /// Bottom row: key 4-7 → LED 7,6,5,4 (reversed due to snake wiring)
@@ -117,7 +172,10 @@ fn register_key_shortcuts(app: &AppHandle, keymaps: &[u16; 8]) {
                   i, led_idx, keycode, shortcut_str);
             match app.global_shortcut().register(shortcut_str.as_str()) {
                 Ok(_) => {
-                    st.shortcut_map.insert(display_str, led_idx);
+                    st.shortcut_map.insert(
+                        display_str,
+                        (led_idx, keycode, shortcut_str.clone()),
+                    );
                 }
                 Err(e) => {
                     error!("[shortcuts] keymap={} register failed: {}", i, e);
@@ -704,20 +762,36 @@ pub fn run() {
                 )?;
 
                 // Per-key global shortcut plugin — each physical key toggles
-                // its own LED slot A↔B instead of one shortcut toggling all keys.
+                // its own LED slot A↔B, then replays the keystroke to the OS
+                // so the focused application still receives the bind.
                 app.handle().plugin(
                     tauri_plugin_global_shortcut::Builder::new()
                         .with_handler(move |app, shortcut, event| {
                             if event.state() != ShortcutState::Pressed { return; }
                             let shortcut_str = format!("{}", shortcut);
                             let state = app.state::<SharedState>();
-                            let key_index = {
+                            let entry = {
                                 let st = state.lock().unwrap();
-                                st.shortcut_map.get(&shortcut_str).copied()
+                                st.shortcut_map.get(&shortcut_str).cloned()
                             };
-                            if let Some(idx) = key_index {
-                                info!("[SHORTCUT] \"{}\" → key={}", shortcut_str, idx);
-                                do_toggle_key(app, idx);
+                            if let Some((led_idx, keycode, register_str)) = entry {
+                                info!("[SHORTCUT] \"{}\" → led={} replay=0x{:04X}",
+                                      shortcut_str, led_idx, keycode);
+                                do_toggle_key(app, led_idx);
+
+                                // Replay: unregister → simulate keystroke → re-register
+                                // Done on a thread to avoid blocking the UI.
+                                let app_clone = app.clone();
+                                std::thread::spawn(move || {
+                                    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+                                    let _ = app_clone.global_shortcut()
+                                        .unregister(register_str.as_str());
+                                    std::thread::sleep(std::time::Duration::from_millis(5));
+                                    simulate_qmk_keystroke(keycode);
+                                    std::thread::sleep(std::time::Duration::from_millis(30));
+                                    let _ = app_clone.global_shortcut()
+                                        .register(register_str.as_str());
+                                });
                             } else {
                                 warn!("[SHORTCUT] Unmatched: \"{}\"", shortcut_str);
                             }
