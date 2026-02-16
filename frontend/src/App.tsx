@@ -1,11 +1,15 @@
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Toaster } from "@/components/ui/sonner";
-import { Header } from "@/components/header";
+import { Toolbar } from "@/components/toolbar";
 import { ColorView } from "@/components/color-view";
 import { KeyAssignmentView } from "@/components/key-assignment-view";
-import { ProfileBar } from "@/components/profile-bar";
+import { SettingsView } from "@/components/settings-view";
 import { useDeck8 } from "@/hooks/use-deck8";
+import { Unplug, RefreshCw } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+const isTauri = "__TAURI_INTERNALS__" in window;
 
 export default function App() {
   const {
@@ -28,31 +32,36 @@ export default function App() {
 
   return (
     <TooltipProvider delayDuration={300}>
-      <div className="flex flex-col h-screen select-none">
-        {/* Header with slot selector */}
-        <Header
-          connected={state.connected}
-          editSlot={editSlot}
-          activeSlot={state.active_slot}
-          onSlotChange={setEditSlot}
-          onToggle={toggle}
-          onReconnect={connect}
+      <div className="flex flex-col h-full select-none">
+        {/* Connection indicator line — 2px bar at the very top */}
+        <div
+          className={cn(
+            "h-[2px] shrink-0 transition-colors duration-300",
+            state.connected
+              ? "bg-emerald-500 shadow-[0_1px_8px_-1px_rgba(52,211,153,0.4)]"
+              : "bg-red-500/70 shadow-[0_1px_8px_-1px_rgba(239,68,68,0.3)]",
+          )}
         />
 
-        {/* Main content with tabs */}
-        <Tabs defaultValue="keys" className="flex flex-col flex-1 min-h-0">
-          <div className="px-4 pt-2">
-            <TabsList className="bg-white/[0.04] border border-white/[0.08]">
-              <TabsTrigger value="keys" className="text-[11px] data-[state=active]:font-semibold">
-                Key Assignment
-              </TabsTrigger>
-              <TabsTrigger value="color" className="text-[11px] data-[state=active]:font-semibold">
-                Color
-              </TabsTrigger>
-            </TabsList>
-          </div>
+        {/* Main content with tabs — Toolbar is inside Tabs so TabsList works */}
+        <Tabs defaultValue="keys" className="flex flex-col flex-1 min-h-0 !gap-0">
+          {/* Unified toolbar: brand + tabs + slot controls + profile + connection */}
+          <Toolbar
+            connected={state.connected}
+            editSlot={editSlot}
+            activeSlot={state.active_slot}
+            onSlotChange={setEditSlot}
+            onToggle={toggle}
+            onReconnect={connect}
+            profiles={profiles}
+            currentProfile={state.current_profile_name}
+            onLoad={loadProfile}
+            onSave={saveProfile}
+            onDelete={deleteProfile}
+            onRestoreDefaults={restoreDefaults}
+          />
 
-          <TabsContent value="keys" className="flex-1 min-h-0 animate-fade-in">
+          <TabsContent value="keys" className="flex flex-col flex-1 min-h-0 overflow-hidden animate-fade-in">
             <KeyAssignmentView
               keys={state.keys}
               keymaps={state.keymaps}
@@ -62,7 +71,7 @@ export default function App() {
             />
           </TabsContent>
 
-          <TabsContent value="color" className="flex-1 min-h-0 animate-fade-in">
+          <TabsContent value="color" className="flex flex-col flex-1 min-h-0 overflow-hidden animate-fade-in">
             <ColorView
               keys={state.keys}
               editSlot={editSlot}
@@ -70,21 +79,65 @@ export default function App() {
               onSelectKey={(i) => setSelectedKey(i === -1 ? null : i)}
               onColorChange={updateKeyColor}
               onToggleOverride={toggleKeyOverride}
+              connected={state.connected}
             />
+          </TabsContent>
+
+          <TabsContent value="settings" className="flex flex-col flex-1 min-h-0 overflow-hidden animate-fade-in">
+            <SettingsView />
           </TabsContent>
         </Tabs>
 
-        {/* Profile bar */}
-        <ProfileBar
-          profiles={profiles}
-          currentProfile={state.current_profile_name}
-          onLoad={loadProfile}
-          onSave={saveProfile}
-          onDelete={deleteProfile}
-          onRestoreDefaults={restoreDefaults}
-        />
+        {/* Connection overlay — only in Tauri, not in browser dev mode */}
+        {isTauri && !state.connected && (
+          <div className="connection-overlay fixed inset-0 z-50 flex items-center justify-center bg-[#09090b]/80 backdrop-blur-sm animate-fade-in">
+            <div className="flex flex-col items-center gap-5 p-8 max-w-xs text-center">
+              {/* Pulsing icon */}
+              <div className="relative">
+                <div className="w-16 h-16 rounded-2xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center">
+                  <Unplug className="w-7 h-7 text-white/20" />
+                </div>
+                <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500/20 border border-red-500/30 flex items-center justify-center">
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse-subtle" />
+                </div>
+              </div>
+
+              {/* Text */}
+              <div className="space-y-1.5">
+                <h2 className="font-pixel text-sm text-white/70 font-bold">
+                  No Device Connected
+                </h2>
+                <p className="font-pixel text-[10px] text-white/30 leading-relaxed">
+                  Connect your Deck-8 via USB and click reconnect, or the app will auto-detect on plug-in.
+                </p>
+              </div>
+
+              {/* Reconnect button */}
+              <button
+                type="button"
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white/[0.08] border border-white/15 text-white/70 hover:bg-white/[0.14] hover:text-white/90 hover:border-white/25 transition-all duration-150 font-pixel text-[11px] font-bold"
+                onClick={connect}
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                Reconnect
+              </button>
+
+              {/* Skip hint */}
+              <button
+                type="button"
+                className="font-pixel text-[8px] text-white/15 hover:text-white/30 uppercase tracking-wider transition-colors"
+                onClick={() => {
+                  // Hide overlay by dispatching a custom event
+                  document.querySelector('.connection-overlay')?.classList.add('hidden');
+                }}
+              >
+                continue without device
+              </button>
+            </div>
+          </div>
+        )}
       </div>
-      <Toaster position="bottom-right" richColors />
+      <Toaster position="top-right" richColors />
     </TooltipProvider>
   );
 }

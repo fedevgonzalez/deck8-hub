@@ -1,17 +1,10 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback } from "react";
 import { KeyGrid } from "@/components/key-grid";
 import { ColorEditorDialog } from "@/components/color-editor-dialog";
-import { applyColors, disableAllOverrides } from "@/lib/tauri";
+import { disableAllOverrides } from "@/lib/tauri";
 import type { ActiveSlot, KeyConfig } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
-import {
-  RefreshCw,
-  EyeOff,
-  Check,
-  Palette,
-  Cpu,
-  ArrowUpFromLine,
-} from "lucide-react";
+import { EyeOff, Palette, Cpu } from "lucide-react";
 import { toast } from "sonner";
 
 interface ColorViewProps {
@@ -24,8 +17,6 @@ interface ColorViewProps {
   connected: boolean;
 }
 
-type SyncStatus = "idle" | "syncing" | "done";
-
 export function ColorView({
   keys,
   editSlot,
@@ -36,7 +27,6 @@ export function ColorView({
   connected,
 }: ColorViewProps) {
   const [editorOpen, setEditorOpen] = useState(false);
-  const [syncStatus, setSyncStatus] = useState<SyncStatus>("idle");
 
   const handleSelectKey = (i: number) => {
     if (selectedKey === i) {
@@ -49,20 +39,6 @@ export function ColorView({
 
   const overrideCount = keys.filter((k) => k.override_enabled).length;
   const deviceCount = keys.length - overrideCount;
-
-  const handleSync = useCallback(async () => {
-    if (syncStatus === "syncing") return;
-    setSyncStatus("syncing");
-    try {
-      await applyColors();
-      setSyncStatus("done");
-      toast.success("Colors synced to device");
-      setTimeout(() => setSyncStatus("idle"), 2000);
-    } catch (e) {
-      setSyncStatus("idle");
-      toast.error(`Sync failed: ${e}`);
-    }
-  }, [syncStatus]);
 
   const handleDisableAll = useCallback(async () => {
     try {
@@ -77,19 +53,6 @@ export function ColorView({
       toast.error(`Failed: ${e}`);
     }
   }, [keys, onToggleOverride]);
-
-  // Auto-open dialog when toggling a key ON
-  const dialogTimerRef = useRef<ReturnType<typeof setTimeout>>();
-  const handleToggleOverride = useCallback((keyIndex: number) => {
-    const wasOff = !keys[keyIndex]?.override_enabled;
-    onToggleOverride(keyIndex);
-    if (wasOff) {
-      onSelectKey(keyIndex);
-      // Clear any pending timer
-      if (dialogTimerRef.current) clearTimeout(dialogTimerRef.current);
-      dialogTimerRef.current = setTimeout(() => setEditorOpen(true), 150);
-    }
-  }, [keys, onToggleOverride, onSelectKey]);
 
   const hasOverrides = overrideCount > 0;
 
@@ -182,83 +145,30 @@ export function ColorView({
               editSlot={editSlot}
               selectedKey={selectedKey}
               onSelectKey={handleSelectKey}
-              onToggleOverride={handleToggleOverride}
               mode="color"
             />
           </div>
         </div>
 
-        {/* Sync footer — terminal style */}
-        <div className={cn(
-          "relative z-[1] flex items-center gap-3 px-5 py-3 border-t transition-colors duration-200",
-          syncStatus === "done"
-            ? "border-emerald-500/20 bg-emerald-500/[0.04]"
-            : "border-white/[0.06] bg-[#0a0a0c]",
-        )}>
-          {!connected ? (
-            /* Disconnected — terminal waiting state */
-            <div className="flex items-center gap-3 w-full">
-              <span className="font-pixel text-[10px] text-white/15">{">"}_</span>
-              <span className="font-pixel text-[10px] text-white/25">
-                awaiting device connection
-              </span>
-              <span className="terminal-cursor font-pixel text-[10px] text-white/30">_</span>
-              <div className="flex-1" />
-              <div className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-red-400/50 animate-pulse-subtle" />
-                <span className="font-pixel text-[8px] text-red-400/40 uppercase tracking-wider">
-                  offline
-                </span>
-              </div>
-            </div>
-          ) : (
-            /* Connected — terminal command style */
-            <div className="flex items-center gap-3 w-full">
-              <button
-                type="button"
-                className={cn(
-                  "sync-button flex items-center gap-2.5 px-4 py-2 rounded-lg text-[11px] font-bold",
-                  "border transition-all duration-150",
-                  syncStatus === "syncing"
-                    ? "border-white/10 bg-white/[0.04] text-white/30 cursor-wait"
-                    : syncStatus === "done"
-                      ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-400"
-                      : "border-white/15 bg-white/[0.08] text-white/70 hover:bg-white/[0.14] hover:text-white/90 hover:border-white/25 hover:shadow-[0_0_20px_-6px_rgba(255,255,255,0.08)]",
-                )}
-                onClick={handleSync}
-                disabled={syncStatus === "syncing"}
-              >
-                {syncStatus === "syncing" ? (
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                ) : syncStatus === "done" ? (
-                  <Check className="w-3.5 h-3.5" />
-                ) : (
-                  <ArrowUpFromLine className="w-3.5 h-3.5" />
-                )}
-                {syncStatus === "syncing"
-                  ? "Syncing..."
-                  : syncStatus === "done"
-                    ? "Synced"
-                    : "Sync"}
-              </button>
-
-              <span className="font-pixel text-[9px] text-white/20 flex-1">
-                {syncStatus === "done"
-                  ? "> colors pushed OK"
-                  : hasOverrides
-                    ? `> ${overrideCount} override${overrideCount !== 1 ? "s" : ""} pending`
-                    : "> all keys on device mode"}
-              </span>
-
-              {/* Connection status */}
-              <div className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400/80" />
-                <span className="font-pixel text-[8px] text-emerald-400/50 uppercase tracking-wider">
-                  live
-                </span>
-              </div>
-            </div>
-          )}
+        {/* Status footer */}
+        <div className="relative z-[1] flex items-center gap-3 px-5 py-2.5 border-t border-white/[0.06] bg-[#0a0a0c]">
+          <span className="font-pixel text-[9px] text-white/20 flex-1">
+            {hasOverrides
+              ? `> ${overrideCount} override${overrideCount !== 1 ? "s" : ""} active`
+              : "> all keys on device mode"}
+          </span>
+          <div className="flex items-center gap-1.5">
+            <span className={cn(
+              "w-1.5 h-1.5 rounded-full",
+              connected ? "bg-emerald-400/80" : "bg-red-400/50 animate-pulse-subtle",
+            )} />
+            <span className={cn(
+              "font-pixel text-[8px] uppercase tracking-wider",
+              connected ? "text-emerald-400/50" : "text-red-400/40",
+            )}>
+              {connected ? "live" : "offline"}
+            </span>
+          </div>
         </div>
       </div>
 

@@ -1,6 +1,13 @@
 import { KeyCell } from "@/components/key-cell";
 import type { ActiveSlot, KeyConfig } from "@/lib/tauri";
 
+/**
+ * Maps visual grid position to hardware index.
+ * Top row: left-to-right = 0,1,2,3
+ * Bottom row: left-to-right = 7,6,5,4 (firmware scans right-to-left)
+ */
+const DISPLAY_ORDER = [0, 1, 2, 3, 7, 6, 5, 4];
+
 interface KeyGridProps {
   keys: KeyConfig[];
   editSlot: ActiveSlot;
@@ -20,17 +27,17 @@ export function KeyGrid({
 }: KeyGridProps) {
   return (
     <div className="grid grid-cols-4 gap-2" style={{ width: "344px" }}>
-      {keys.map((config, i) => (
+      {DISPLAY_ORDER.map((hwIndex) => (
+        <div key={hwIndex} className="key-stagger">
         <KeyCell
-          key={i}
-          index={i}
-          config={config}
+          config={keys[hwIndex]}
           editSlot={editSlot}
-          isSelected={selectedKey === i}
-          onClick={() => onSelectKey(i)}
+          isSelected={selectedKey === hwIndex}
+          onClick={() => onSelectKey(hwIndex)}
           mode={mode}
-          keycodeLabel={keycodeLabels?.[i]}
+          keycodeLabel={keycodeLabels?.[hwIndex]}
         />
+        </div>
       ))}
     </div>
   );

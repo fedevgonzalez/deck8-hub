@@ -47,7 +47,7 @@ function numbers(): KeycodeDef[] {
 
 export const KEYCODES: KeycodeDef[] = [
   // Special
-  { code: KC_NO, label: "NO", category: "special" },
+  { code: KC_NO, label: "—", category: "special" },
   { code: KC_TRANSPARENT, label: "TRNS", category: "special" },
 
   // Letters

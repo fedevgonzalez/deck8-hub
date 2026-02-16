@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 
 use crate::hid::Deck8Device;
-use crate::protocol::HsvColor;
+use crate::protocol::{DeviceInfo, HsvColor, RgbMatrixState};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum ActiveSlot {
@@ -19,15 +19,11 @@ impl std::fmt::Display for ActiveSlot {
     }
 }
 
-fn default_true() -> bool {
-    true
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KeyConfig {
     pub slot_a: HsvColor,
     pub slot_b: HsvColor,
-    #[serde(default = "default_true")]
+    #[serde(default)]
     pub override_enabled: bool,
 }
 
@@ -36,7 +32,7 @@ impl Default for KeyConfig {
         Self {
             slot_a: HsvColor { h: 0x55, s: 0xFF, v: 0x78 }, // green
             slot_b: HsvColor { h: 0x00, s: 0xFF, v: 0x78 }, // red
-            override_enabled: true,
+            override_enabled: false,
         }
     }
 }
@@ -47,6 +43,8 @@ pub struct AppState {
     pub active_slot: ActiveSlot,
     pub current_profile_name: Option<String>,
     pub keymaps: [u16; 8],
+    pub device_info: Option<DeviceInfo>,
+    pub rgb_matrix: Option<RgbMatrixState>,
 }
 
 impl Default for AppState {
@@ -57,6 +55,8 @@ impl Default for AppState {
             active_slot: ActiveSlot::A,
             current_profile_name: None,
             keymaps: [0u16; 8],
+            device_info: None,
+            rgb_matrix: None,
         }
     }
 }
@@ -69,6 +69,8 @@ pub struct StateSnapshot {
     pub active_slot: ActiveSlot,
     pub current_profile_name: Option<String>,
     pub keymaps: Vec<u16>,
+    pub device_info: Option<DeviceInfo>,
+    pub rgb_matrix: Option<RgbMatrixState>,
 }
 
 impl AppState {
@@ -79,6 +81,8 @@ impl AppState {
             active_slot: self.active_slot,
             current_profile_name: self.current_profile_name.clone(),
             keymaps: self.keymaps.to_vec(),
+            device_info: self.device_info.clone(),
+            rgb_matrix: self.rgb_matrix,
         }
     }
 

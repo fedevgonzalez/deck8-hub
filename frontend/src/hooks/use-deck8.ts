@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import type { ActiveSlot, StateSnapshot } from "@/lib/tauri";
+import type { ActiveSlot, RgbMatrixState, StateSnapshot } from "@/lib/tauri";
 import {
   connectDevice,
   getState,
@@ -14,6 +14,16 @@ import {
   setKeycode as ipcSetKeycode,
   setKeyOverride,
   restoreDefaults,
+  deviceIndication,
+  bootloaderJump,
+  eepromReset,
+  dynamicKeymapReset,
+  macroReset,
+  setRgbBrightness,
+  setRgbEffect,
+  setRgbSpeed,
+  setRgbColor,
+  saveRgbMatrix,
 } from "@/lib/tauri";
 
 const DEFAULT_STATE: StateSnapshot = {
@@ -21,11 +31,13 @@ const DEFAULT_STATE: StateSnapshot = {
   keys: Array.from({ length: 8 }, () => ({
     slot_a: { h: 0x55, s: 0xff, v: 0x78 },
     slot_b: { h: 0x00, s: 0xff, v: 0x78 },
-    override_enabled: true,
+    override_enabled: false,
   })),
   active_slot: "A",
   current_profile_name: null,
   keymaps: [0, 0, 0, 0, 0, 0, 0, 0],
+  device_info: null,
+  rgb_matrix: null,
 };
 
 export function useDeck8() {
@@ -34,6 +46,7 @@ export function useDeck8() {
   const [editSlot, setEditSlot] = useState<ActiveSlot>("A");
   const [profiles, setProfiles] = useState<string[]>([]);
   const colorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rgbTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Refresh helpers ─────────────────────────────────────
 
@@ -212,6 +225,109 @@ export function useDeck8() {
     [refreshProfiles],
   );
 
+  // ── Device info & control actions ──────────────────────
+
+  const doDeviceIndication = useCallback(async () => {
+    try {
+      await deviceIndication();
+    } catch (e) {
+      toast.error(`Identify failed: ${e}`);
+    }
+  }, []);
+
+  const doBootloaderJump = useCallback(async () => {
+    try {
+      await bootloaderJump();
+      setState((prev) => ({ ...prev, connected: false, device_info: null, rgb_matrix: null }));
+      toast.success("Entering bootloader — device will disconnect");
+    } catch (e) {
+      toast.error(`Bootloader jump failed: ${e}`);
+    }
+  }, []);
+
+  const doEepromReset = useCallback(async () => {
+    try {
+      await eepromReset();
+      toast.success("EEPROM reset — reconnect device");
+    } catch (e) {
+      toast.error(`EEPROM reset failed: ${e}`);
+    }
+  }, []);
+
+  const doDynamicKeymapReset = useCallback(async () => {
+    try {
+      await dynamicKeymapReset();
+      await refreshState();
+      toast.success("Keymap reset to defaults");
+    } catch (e) {
+      toast.error(`Keymap reset failed: ${e}`);
+    }
+  }, [refreshState]);
+
+  const doMacroReset = useCallback(async () => {
+    try {
+      await macroReset();
+      toast.success("Macros reset");
+    } catch (e) {
+      toast.error(`Macro reset failed: ${e}`);
+    }
+  }, []);
+
+  // ── RGB Matrix actions ────────────────────────────────
+
+  const updateRgb = useCallback(
+    (field: keyof RgbMatrixState, value: number) => {
+      setState((prev) => {
+        if (!prev.rgb_matrix) return prev;
+        return { ...prev, rgb_matrix: { ...prev.rgb_matrix, [field]: value } };
+      });
+
+      if (rgbTimer.current) clearTimeout(rgbTimer.current);
+      rgbTimer.current = setTimeout(async () => {
+        try {
+          switch (field) {
+            case "brightness":
+              await setRgbBrightness(value);
+              break;
+            case "effect":
+              await setRgbEffect(value);
+              break;
+            case "speed":
+              await setRgbSpeed(value);
+              break;
+          }
+        } catch { /* silent */ }
+      }, 50);
+    },
+    [],
+  );
+
+  const updateRgbColor = useCallback(
+    (h: number, s: number) => {
+      setState((prev) => {
+        if (!prev.rgb_matrix) return prev;
+        return { ...prev, rgb_matrix: { ...prev.rgb_matrix, color_h: h, color_s: s } };
+      });
+
+      if (rgbTimer.current) clearTimeout(rgbTimer.current);
+      rgbTimer.current = setTimeout(async () => {
+        try {
+          await setRgbColor(h, s);
+        } catch { /* silent */ }
+      }, 50);
+    },
+    [],
+  );
+
+  const doSaveRgb = useCallback(async () => {
+    try {
+      await saveRgbMatrix();
+      toast.success("RGB settings saved to EEPROM");
+    } catch (e) {
+      toast.error(`Save failed: ${e}`);
+    }
+  }, []);
+
   // ── Initialization + event listener ─────────────────────
 
   useEffect(() => {
@@ -252,5 +368,13 @@ export function useDeck8() {
     loadProfile: doLoadProfile,
     saveProfile: doSaveProfile,
     deleteProfile: doDeleteProfile,
+    deviceIndication: doDeviceIndication,
+    bootloaderJump: doBootloaderJump,
+    eepromReset: doEepromReset,
+    dynamicKeymapReset: doDynamicKeymapReset,
+    macroReset: doMacroReset,
+    updateRgb,
+    updateRgbColor,
+    saveRgb: doSaveRgb,
   };
 }

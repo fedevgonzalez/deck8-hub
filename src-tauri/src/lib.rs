@@ -4,6 +4,7 @@ mod protocol;
 mod state;
 
 use log::error;
+use protocol::{DeviceInfo, RgbMatrixState};
 use state::{ActiveSlot, AppState, KeyConfig, SharedState, StateSnapshot};
 use tauri::{
     image::Image,
@@ -27,6 +28,13 @@ fn apply_key_to_device(dev: &hid::Deck8Device, key_index: u8, key: &KeyConfig, s
     }
 }
 
+/// Persist key state to disk (fire-and-forget).
+fn persist_keys(keys: &[KeyConfig; 8]) {
+    if let Err(e) = profile::save_state(keys) {
+        error!("Failed to persist key state: {e:#}");
+    }
+}
+
 /// Apply all 8 keys to device, respecting override_enabled.
 fn apply_all_to_device(dev: &hid::Deck8Device, keys: &[KeyConfig; 8], slot: ActiveSlot) {
     for i in 0..8 {
@@ -41,21 +49,34 @@ fn connect_device(state: State<SharedState>) -> bool {
     let mut s = state.lock().unwrap();
     match hid::Deck8Device::open() {
         Ok(dev) => {
-            // Read keymaps from device
             match dev.read_all_keycodes() {
                 Ok(keymaps) => s.keymaps = keymaps,
                 Err(e) => error!("Failed to read keymaps: {e:#}"),
             }
+            match dev.get_device_info() {
+                Ok(info) => s.device_info = Some(info),
+                Err(e) => error!("Failed to read device info: {e:#}"),
+            }
+            match dev.rgb_get_state() {
+                Ok(rgb) => s.rgb_matrix = Some(rgb),
+                Err(e) => error!("Failed to read RGB state: {e:#}"),
+            }
             s.device = Some(dev);
-            // Apply current slot colors to device
+            // Re-apply only keys that have override enabled (persisted from last session)
             if let Some(ref dev) = s.device {
-                apply_all_to_device(dev, &s.keys, s.active_slot);
+                for i in 0..8 {
+                    if s.keys[i].override_enabled {
+                        apply_key_to_device(dev, i as u8, &s.keys[i], s.active_slot);
+                    }
+                }
             }
             true
         }
         Err(e) => {
             error!("Failed to connect: {e:#}");
             s.device = None;
+            s.device_info = None;
+            s.rgb_matrix = None;
             false
         }
     }
@@ -94,6 +115,7 @@ fn set_key_color(
                 .map_err(|e| e.to_string())?;
         }
     }
+    persist_keys(&st.keys);
     Ok(())
 }
 
@@ -180,6 +202,7 @@ fn set_key_override(
     if let Some(ref dev) = st.device {
         apply_key_to_device(dev, key_index as u8, &st.keys[key_index], st.active_slot);
     }
+    persist_keys(&st.keys);
     Ok(st.snapshot())
 }
 
@@ -190,6 +213,7 @@ fn restore_defaults(state: State<SharedState>) -> Result<StateSnapshot, String> 
     if let Some(ref dev) = st.device {
         apply_all_to_device(dev, &st.keys, st.active_slot);
     }
+    persist_keys(&st.keys);
     Ok(st.snapshot())
 }
 
@@ -236,6 +260,7 @@ fn load_profile(state: State<SharedState>, name: String) -> Result<StateSnapshot
     if let Some(ref dev) = st.device {
         apply_all_to_device(dev, &st.keys, st.active_slot);
     }
+    persist_keys(&st.keys);
     Ok(st.snapshot())
 }
 
@@ -247,6 +272,158 @@ fn delete_profile(state: State<SharedState>, name: String) -> Result<(), String>
         st.current_profile_name = None;
     }
     Ok(())
+}
+
+// ── Device info & control commands ───────────────────────────────────────
+
+#[tauri::command]
+fn get_device_info(state: State<SharedState>) -> Result<DeviceInfo, String> {
+    let mut st = state.lock().unwrap();
+    if let Some(ref dev) = st.device {
+        let info = dev.get_device_info().map_err(|e| e.to_string())?;
+        st.device_info = Some(info.clone());
+        Ok(info)
+    } else {
+        st.device_info.clone().ok_or_else(|| "Not connected".into())
+    }
+}
+
+#[tauri::command]
+fn device_indication(state: State<SharedState>) -> Result<(), String> {
+    let st = state.lock().unwrap();
+    if let Some(ref dev) = st.device {
+        dev.device_indication().map_err(|e| e.to_string())
+    } else {
+        Err("Not connected".into())
+    }
+}
+
+#[tauri::command]
+fn bootloader_jump(state: State<SharedState>) -> Result<(), String> {
+    let mut st = state.lock().unwrap();
+    if let Some(ref dev) = st.device {
+        let _ = dev.bootloader_jump();
+    }
+    st.device = None;
+    st.device_info = None;
+    st.rgb_matrix = None;
+    Ok(())
+}
+
+#[tauri::command]
+fn eeprom_reset(state: State<SharedState>) -> Result<(), String> {
+    let st = state.lock().unwrap();
+    if let Some(ref dev) = st.device {
+        dev.eeprom_reset().map_err(|e| e.to_string())
+    } else {
+        Err("Not connected".into())
+    }
+}
+
+#[tauri::command]
+fn dynamic_keymap_reset(state: State<SharedState>) -> Result<(), String> {
+    let mut st = state.lock().unwrap();
+    if let Some(ref dev) = st.device {
+        dev.dynamic_keymap_reset().map_err(|e| e.to_string())?;
+        match dev.read_all_keycodes() {
+            Ok(keymaps) => st.keymaps = keymaps,
+            Err(e) => error!("Failed to re-read keymaps after reset: {e:#}"),
+        }
+        Ok(())
+    } else {
+        Err("Not connected".into())
+    }
+}
+
+#[tauri::command]
+fn macro_reset(state: State<SharedState>) -> Result<(), String> {
+    let st = state.lock().unwrap();
+    if let Some(ref dev) = st.device {
+        dev.macro_reset().map_err(|e| e.to_string())
+    } else {
+        Err("Not connected".into())
+    }
+}
+
+// ── RGB Matrix commands ─────────────────────────────────────────────────
+
+#[tauri::command]
+fn get_rgb_matrix(state: State<SharedState>) -> Result<RgbMatrixState, String> {
+    let mut st = state.lock().unwrap();
+    if let Some(ref dev) = st.device {
+        let rgb = dev.rgb_get_state().map_err(|e| e.to_string())?;
+        st.rgb_matrix = Some(rgb);
+        Ok(rgb)
+    } else {
+        st.rgb_matrix.ok_or_else(|| "Not connected".into())
+    }
+}
+
+#[tauri::command]
+fn set_rgb_brightness(state: State<SharedState>, value: u8) -> Result<(), String> {
+    let mut st = state.lock().unwrap();
+    if let Some(ref dev) = st.device {
+        dev.rgb_set_brightness(value).map_err(|e| e.to_string())?;
+        if let Some(ref mut rgb) = st.rgb_matrix {
+            rgb.brightness = value;
+        }
+        Ok(())
+    } else {
+        Err("Not connected".into())
+    }
+}
+
+#[tauri::command]
+fn set_rgb_effect(state: State<SharedState>, value: u8) -> Result<(), String> {
+    let mut st = state.lock().unwrap();
+    if let Some(ref dev) = st.device {
+        dev.rgb_set_effect(value).map_err(|e| e.to_string())?;
+        if let Some(ref mut rgb) = st.rgb_matrix {
+            rgb.effect = value;
+        }
+        Ok(())
+    } else {
+        Err("Not connected".into())
+    }
+}
+
+#[tauri::command]
+fn set_rgb_speed(state: State<SharedState>, value: u8) -> Result<(), String> {
+    let mut st = state.lock().unwrap();
+    if let Some(ref dev) = st.device {
+        dev.rgb_set_speed(value).map_err(|e| e.to_string())?;
+        if let Some(ref mut rgb) = st.rgb_matrix {
+            rgb.speed = value;
+        }
+        Ok(())
+    } else {
+        Err("Not connected".into())
+    }
+}
+
+#[tauri::command]
+fn set_rgb_color(state: State<SharedState>, h: u8, s: u8) -> Result<(), String> {
+    let mut st = state.lock().unwrap();
+    if let Some(ref dev) = st.device {
+        dev.rgb_set_color(h, s).map_err(|e| e.to_string())?;
+        if let Some(ref mut rgb) = st.rgb_matrix {
+            rgb.color_h = h;
+            rgb.color_s = s;
+        }
+        Ok(())
+    } else {
+        Err("Not connected".into())
+    }
+}
+
+#[tauri::command]
+fn save_rgb_matrix(state: State<SharedState>) -> Result<(), String> {
+    let st = state.lock().unwrap();
+    if let Some(ref dev) = st.device {
+        dev.rgb_save().map_err(|e| e.to_string())
+    } else {
+        Err("Not connected".into())
+    }
 }
 
 // ── Toggle helper (used by both command and hotkey) ─────────────────────
@@ -273,15 +450,37 @@ fn do_toggle(app: &AppHandle) -> Result<String, String> {
 
 pub fn run() {
     tauri::Builder::default()
-        .manage(std::sync::Mutex::new(AppState::default()))
+        .manage(std::sync::Mutex::new({
+            let mut state = AppState::default();
+            // Restore key colors from last session
+            if let Some(keys) = profile::load_state() {
+                state.keys = keys;
+            }
+            state
+        }))
         .setup(|app| {
-            // Register global shortcut plugin and CTRL+ALT+M
+            // Persist initial state to disk (ensures state.json exists)
+            {
+                let state = app.state::<SharedState>();
+                let st = state.lock().unwrap();
+                persist_keys(&st.keys);
+            }
+
+            // Register plugins
             #[cfg(desktop)]
             {
                 use tauri_plugin_global_shortcut::{
                     GlobalShortcutExt, ShortcutState,
                 };
 
+                // Autostart plugin
+                app.handle().plugin(
+                    tauri_plugin_autostart::Builder::new()
+                        .args(["--minimized"])
+                        .build(),
+                )?;
+
+                // Global shortcut plugin
                 app.handle().plugin(
                     tauri_plugin_global_shortcut::Builder::new()
                         .with_handler(move |app, _shortcut, event| {
@@ -364,6 +563,18 @@ pub fn run() {
             save_profile,
             load_profile,
             delete_profile,
+            get_device_info,
+            device_indication,
+            bootloader_jump,
+            eeprom_reset,
+            dynamic_keymap_reset,
+            macro_reset,
+            get_rgb_matrix,
+            set_rgb_brightness,
+            set_rgb_effect,
+            set_rgb_speed,
+            set_rgb_color,
+            save_rgb_matrix,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

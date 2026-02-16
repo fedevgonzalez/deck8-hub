@@ -9,6 +9,9 @@
     "core:window:allow-hide",
     "core:window:allow-close",
     "core:window:allow-set-focus",
-    "global-shortcut:default"
+    "global-shortcut:default",
+    "autostart:allow-enable",
+    "autostart:allow-disable",
+    "autostart:allow-is-enabled"
   ]
 }

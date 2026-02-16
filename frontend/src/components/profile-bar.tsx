@@ -15,6 +15,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  FolderOpen,
+  Save,
+  SaveAll,
+  RotateCcw,
+  Trash2,
+} from "lucide-react";
 
 interface ProfileBarProps {
   profiles: string[];
@@ -43,78 +50,98 @@ export function ProfileBar({
 
   return (
     <>
-      <div className="flex items-center gap-2 px-5 py-3 border-t backdrop-blur-sm bg-black/40 border-white/[0.12]">
-        <span className="text-[11px] text-muted-foreground font-medium mr-1">Profile</span>
-        <Select value={effectiveSelection} onValueChange={setSelected}>
-          <SelectTrigger className="w-[140px] h-8 text-[11px] border border-white/[0.08] hover:border-white/[0.20] transition-smooth">
-            <SelectValue placeholder="None" />
-          </SelectTrigger>
-          <SelectContent>
-            {profiles.map((name) => (
-              <SelectItem key={name} value={name}>
-                {name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="flex items-center px-5 py-2.5 border-t border-white/10 bg-[#0d0d0f]">
+        {/* Left: Profile label + selector */}
+        <div className="flex-1 flex items-center gap-2">
+          <span className="text-[10px] uppercase tracking-[0.1em] text-white/25 font-medium select-none">
+            Profile
+          </span>
+          <Select value={effectiveSelection} onValueChange={setSelected}>
+            <SelectTrigger className="w-[140px] h-7 text-[11px] border border-white/10 hover:border-white/25 transition-smooth bg-[#141416] rounded-lg">
+              <SelectValue placeholder="None" />
+            </SelectTrigger>
+            <SelectContent>
+              {profiles.map((name) => (
+                <SelectItem key={name} value={name}>
+                  {name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
-        <Button
-          variant="ghost" size="sm"
-          className="text-[11px] text-muted-foreground hover:text-foreground h-8 px-3 transition-smooth font-medium"
-          disabled={!effectiveSelection}
-          onClick={() => { if (effectiveSelection) onLoad(effectiveSelection); }}
-        >
-          Load
-        </Button>
+        {/* Center: Action buttons grouped */}
+        <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-white/[0.04] border border-white/[0.06]">
+          <Button
+            variant="ghost" size="sm"
+            className="text-[10px] text-white/35 hover:text-white/80 hover:bg-white/[0.06] h-7 px-2.5 gap-1.5 transition-smooth font-medium rounded-md"
+            disabled={!effectiveSelection}
+            onClick={() => { if (effectiveSelection) onLoad(effectiveSelection); }}
+          >
+            <FolderOpen className="w-3 h-3" />
+            Load
+          </Button>
 
-        <Button
-          variant="ghost" size="sm"
-          className="text-[11px] text-muted-foreground hover:text-foreground h-8 px-3 transition-smooth font-medium"
-          disabled={!currentProfile}
-          onClick={() => { if (currentProfile) onSave(currentProfile); }}
-        >
-          Save
-        </Button>
+          <div className="w-px h-3.5 bg-white/[0.08]" />
 
-        <Button
-          variant="ghost" size="sm"
-          className="text-[11px] text-muted-foreground hover:text-foreground h-8 px-3 transition-smooth font-medium"
-          onClick={() => { setSaveAsName(""); setSaveAsOpen(true); }}
-        >
-          Save As
-        </Button>
+          <Button
+            variant="ghost" size="sm"
+            className="text-[10px] text-white/35 hover:text-white/80 hover:bg-white/[0.06] h-7 px-2.5 gap-1.5 transition-smooth font-medium rounded-md"
+            disabled={!currentProfile}
+            onClick={() => { if (currentProfile) onSave(currentProfile); }}
+          >
+            <Save className="w-3 h-3" />
+            Save
+          </Button>
 
-        <Button
-          variant="ghost" size="sm"
-          className="text-[11px] text-muted-foreground hover:text-foreground h-8 px-3 transition-smooth font-medium"
-          onClick={() => setRestoreOpen(true)}
-        >
-          Defaults
-        </Button>
+          <div className="w-px h-3.5 bg-white/[0.08]" />
 
-        <div className="flex-1" />
+          <Button
+            variant="ghost" size="sm"
+            className="text-[10px] text-white/35 hover:text-white/80 hover:bg-white/[0.06] h-7 px-2.5 gap-1.5 transition-smooth font-medium rounded-md"
+            onClick={() => { setSaveAsName(""); setSaveAsOpen(true); }}
+          >
+            <SaveAll className="w-3 h-3" />
+            Save As
+          </Button>
 
-        <Button
-          variant="ghost" size="sm"
-          className="text-[11px] text-red-400/60 hover:text-red-400 hover:bg-red-500/10 hover:border-red-500/20 border border-transparent h-8 px-3 transition-smooth font-medium"
-          disabled={!effectiveSelection}
-          onClick={() => setDeleteOpen(true)}
-        >
-          Delete
-        </Button>
+          <div className="w-px h-3.5 bg-white/[0.08]" />
+
+          <Button
+            variant="ghost" size="sm"
+            className="text-[10px] text-white/35 hover:text-white/80 hover:bg-white/[0.06] h-7 px-2.5 gap-1.5 transition-smooth font-medium rounded-md"
+            onClick={() => setRestoreOpen(true)}
+          >
+            <RotateCcw className="w-3 h-3" />
+            Defaults
+          </Button>
+        </div>
+
+        {/* Right: Delete */}
+        <div className="flex-1 flex items-center justify-end">
+          <Button
+            variant="ghost" size="sm"
+            className="text-[10px] text-red-400/40 hover:text-red-400 hover:bg-red-500/10 h-7 px-2.5 gap-1.5 transition-smooth font-medium rounded-md"
+            disabled={!effectiveSelection}
+            onClick={() => setDeleteOpen(true)}
+          >
+            <Trash2 className="w-3 h-3" />
+            Delete
+          </Button>
+        </div>
       </div>
 
       {/* Save As Dialog */}
       <Dialog open={saveAsOpen} onOpenChange={setSaveAsOpen}>
-        <DialogContent className="max-w-sm backdrop-blur-xl bg-black/95 border-white/[0.15] animate-scale-in">
+        <DialogContent className="max-w-sm bg-[#111113] border-white/12 animate-scale-in">
           <DialogHeader>
-            <DialogTitle className="text-sm">Save Profile As</DialogTitle>
-            <DialogDescription className="text-xs">
+            <DialogTitle className="text-sm font-bold">Save Profile As</DialogTitle>
+            <DialogDescription className="text-xs text-white/40">
               Enter a name for the new profile.
             </DialogDescription>
           </DialogHeader>
           <input
-            className="w-full px-4 py-2.5 rounded-lg bg-black border border-white/[0.12] text-foreground text-xs focus:outline-none focus:ring-2 focus:ring-white/25 placeholder:text-muted-foreground/50 transition-smooth"
+            className="w-full px-4 py-2.5 rounded-lg bg-[#09090b] border border-white/12 text-white/90 text-xs focus:outline-none focus:ring-2 focus:ring-white/25 placeholder:text-white/20 transition-smooth"
             placeholder="my-profile"
             value={saveAsName}
             onChange={(e) => setSaveAsName(e.target.value)}
@@ -127,11 +154,11 @@ export function ProfileBar({
             autoFocus
           />
           <DialogFooter>
-            <Button variant="ghost" size="sm" className="text-xs transition-smooth" onClick={() => setSaveAsOpen(false)}>
+            <Button variant="ghost" size="sm" className="text-xs text-white/40" onClick={() => setSaveAsOpen(false)}>
               Cancel
             </Button>
             <Button
-              size="sm" className="text-xs transition-smooth"
+              size="sm" className="text-xs font-semibold"
               disabled={!saveAsName.trim()}
               onClick={() => {
                 const clean = saveAsName.trim().replace(/[^a-zA-Z0-9_-]/g, "");
@@ -144,22 +171,22 @@ export function ProfileBar({
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirm Dialog */}
+      {/* Delete Confirm */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent className="max-w-sm backdrop-blur-xl bg-black/95 border-white/[0.15] animate-scale-in">
+        <DialogContent className="max-w-sm bg-[#111113] border-white/12 animate-scale-in">
           <DialogHeader>
-            <DialogTitle className="text-sm">Delete Profile</DialogTitle>
-            <DialogDescription className="text-xs">
+            <DialogTitle className="text-sm font-bold">Delete Profile</DialogTitle>
+            <DialogDescription className="text-xs text-white/40">
               Delete &quot;{effectiveSelection}&quot;? This cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="ghost" size="sm" className="text-xs transition-smooth" onClick={() => setDeleteOpen(false)}>
+            <Button variant="ghost" size="sm" className="text-xs text-white/40" onClick={() => setDeleteOpen(false)}>
               Cancel
             </Button>
             <Button
               size="sm"
-              className="text-xs bg-red-500 text-white hover:bg-red-600 transition-smooth"
+              className="text-xs bg-red-500 text-white hover:bg-red-600 font-semibold"
               onClick={() => {
                 if (effectiveSelection) { onDelete(effectiveSelection); setSelected(""); }
                 setDeleteOpen(false);
@@ -171,26 +198,22 @@ export function ProfileBar({
         </DialogContent>
       </Dialog>
 
-      {/* Restore Defaults Dialog */}
+      {/* Restore Defaults */}
       <Dialog open={restoreOpen} onOpenChange={setRestoreOpen}>
-        <DialogContent className="max-w-sm backdrop-blur-xl bg-black/95 border-white/[0.15] animate-scale-in">
+        <DialogContent className="max-w-sm bg-[#111113] border-white/12 animate-scale-in">
           <DialogHeader>
-            <DialogTitle className="text-sm">Restore Defaults</DialogTitle>
-            <DialogDescription className="text-xs">
+            <DialogTitle className="text-sm font-bold">Restore Defaults</DialogTitle>
+            <DialogDescription className="text-xs text-white/40">
               Reset all key colors to defaults? This cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="ghost" size="sm" className="text-xs transition-smooth" onClick={() => setRestoreOpen(false)}>
+            <Button variant="ghost" size="sm" className="text-xs text-white/40" onClick={() => setRestoreOpen(false)}>
               Cancel
             </Button>
             <Button
-              size="sm"
-              className="text-xs transition-smooth"
-              onClick={() => {
-                onRestoreDefaults();
-                setRestoreOpen(false);
-              }}
+              size="sm" className="text-xs font-semibold"
+              onClick={() => { onRestoreDefaults(); setRestoreOpen(false); }}
             >
               Restore
             </Button>

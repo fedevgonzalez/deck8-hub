@@ -14,12 +14,31 @@ export interface KeyConfig {
 
 export type ActiveSlot = "A" | "B";
 
+export interface DeviceInfo {
+  protocol_version: number;
+  firmware_version: number;
+  uptime: number;
+  layer_count: number;
+  macro_count: number;
+  macro_buffer_size: number;
+}
+
+export interface RgbMatrixState {
+  brightness: number;
+  effect: number;
+  speed: number;
+  color_h: number;
+  color_s: number;
+}
+
 export interface StateSnapshot {
   connected: boolean;
   keys: KeyConfig[];
   active_slot: ActiveSlot;
   current_profile_name: string | null;
   keymaps: number[];
+  device_info: DeviceInfo | null;
+  rgb_matrix: RgbMatrixState | null;
 }
 
 // ── Runtime detection ───────────────────────────────────────────────
@@ -108,6 +127,70 @@ export function setKeyOverride(keyIndex: number, enabled: boolean): Promise<Stat
 export function restoreDefaults(): Promise<StateSnapshot> {
   if (!isTauri) return Promise.reject("Not in Tauri");
   return tauriInvoke<StateSnapshot>("restore_defaults");
+}
+
+// ── Device info & control ───────────────────────────────────────────
+
+export function getDeviceInfo(): Promise<DeviceInfo> {
+  if (!isTauri) return Promise.reject("Not in Tauri");
+  return tauriInvoke<DeviceInfo>("get_device_info");
+}
+
+export function deviceIndication(): Promise<void> {
+  if (!isTauri) return Promise.resolve();
+  return tauriInvoke("device_indication");
+}
+
+export function bootloaderJump(): Promise<void> {
+  if (!isTauri) return Promise.resolve();
+  return tauriInvoke("bootloader_jump");
+}
+
+export function eepromReset(): Promise<void> {
+  if (!isTauri) return Promise.resolve();
+  return tauriInvoke("eeprom_reset");
+}
+
+export function dynamicKeymapReset(): Promise<void> {
+  if (!isTauri) return Promise.resolve();
+  return tauriInvoke("dynamic_keymap_reset");
+}
+
+export function macroReset(): Promise<void> {
+  if (!isTauri) return Promise.resolve();
+  return tauriInvoke("macro_reset");
+}
+
+// ── RGB Matrix ─────────────────────────────────────────────────────
+
+export function getRgbMatrix(): Promise<RgbMatrixState> {
+  if (!isTauri) return Promise.reject("Not in Tauri");
+  return tauriInvoke<RgbMatrixState>("get_rgb_matrix");
+}
+
+export function setRgbBrightness(value: number): Promise<void> {
+  if (!isTauri) return Promise.resolve();
+  return tauriInvoke("set_rgb_brightness", { value });
+}
+
+export function setRgbEffect(value: number): Promise<void> {
+  if (!isTauri) return Promise.resolve();
+  return tauriInvoke("set_rgb_effect", { value });
+}
+
+export function setRgbSpeed(value: number): Promise<void> {
+  if (!isTauri) return Promise.resolve();
+  return tauriInvoke("set_rgb_speed", { value });
+}
+
+export function setRgbColor(h: number, s: number): Promise<void> {
+  if (!isTauri) return Promise.resolve();
+  return tauriInvoke("set_rgb_color", { h, s });
+}
+
+export function saveRgbMatrix(): Promise<void> {
+  if (!isTauri) return Promise.resolve();
+  return tauriInvoke("save_rgb_matrix");
 }
 
 // ── Events ──────────────────────────────────────────────────────────
