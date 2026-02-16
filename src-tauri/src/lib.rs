@@ -401,20 +401,27 @@ fn get_keymap(state: State<SharedState>) -> Result<Vec<u16>, String> {
 
 #[tauri::command]
 fn set_keycode(
+    app: AppHandle,
     state: State<SharedState>,
     key_index: usize,
     keycode: u16,
 ) -> Result<(), String> {
-    let mut st = state.lock().unwrap();
-    if key_index >= 8 {
-        return Err("key_index out of range".into());
+    let keymaps_copy;
+    {
+        let mut st = state.lock().unwrap();
+        if key_index >= 8 {
+            return Err("key_index out of range".into());
+        }
+        let (row, col) = protocol::key_index_to_matrix(key_index as u8);
+        if let Some(ref dev) = st.device {
+            dev.set_keycode(0, row, col, keycode)
+                .map_err(|e| e.to_string())?;
+        }
+        st.keymaps[key_index] = keycode;
+        keymaps_copy = st.keymaps;
     }
-    let (row, col) = protocol::key_index_to_matrix(key_index as u8);
-    if let Some(ref dev) = st.device {
-        dev.set_keycode(0, row, col, keycode)
-            .map_err(|e| e.to_string())?;
-    }
-    st.keymaps[key_index] = keycode;
+    // Re-register shortcuts with updated keymaps
+    register_key_shortcuts(&app, &keymaps_copy);
     Ok(())
 }
 
