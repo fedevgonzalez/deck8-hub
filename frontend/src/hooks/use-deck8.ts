@@ -142,23 +142,17 @@ export function useDeck8() {
 
   const toggleKeyOverride = useCallback(
     async (keyIndex: number) => {
+      const newEnabled = !state.keys[keyIndex].override_enabled;
       // Optimistic toggle
       setState((prev) => {
         const keys = prev.keys.map((k, i) => {
           if (i !== keyIndex) return k;
-          return { ...k, override_enabled: !k.override_enabled };
+          return { ...k, override_enabled: newEnabled };
         });
         return { ...prev, keys };
       });
       try {
-        const snapshot = await setKeyOverride(
-          keyIndex,
-          // We already toggled optimistically, so the new state is correct
-          // But we read from the pre-toggle state for the IPC call:
-          // Actually, we need the NEW value. Let's use the state that was set.
-          !state.keys[keyIndex].override_enabled,
-        );
-        setState(snapshot);
+        await setKeyOverride(keyIndex, newEnabled);
       } catch {
         // Revert on failure
         await refreshState();

@@ -491,9 +491,7 @@ pub fn run() {
                         .build(),
                 )?;
 
-                app.global_shortcut()
-                    .register("CmdOrCtrl+Alt+M")
-                    .expect("Failed to register global shortcut");
+                let _ = app.global_shortcut().register("CmdOrCtrl+Alt+M");
             }
 
             // System tray

@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { ColorPicker } from "@/components/color-picker";
 import { hsvToRgb, hsvToHex } from "@/lib/hsv";
-import { X, Copy, Cpu } from "lucide-react";
+import { X, Cpu, ToggleRight } from "lucide-react";
 import type { ActiveSlot, KeyConfig } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 
@@ -34,11 +34,13 @@ export function ColorEditorDialog({
   onClose,
 }: ColorEditorDialogProps) {
   const [slot, setSlot] = useState<ActiveSlot>(editSlot);
+  const [toggleMode, setToggleMode] = useState(false);
   const didAutoEnable = useRef(false);
 
   useEffect(() => {
     if (open) {
       setSlot(editSlot);
+      setToggleMode(false);
       didAutoEnable.current = false;
     }
   }, [open, editSlot]);
@@ -54,23 +56,34 @@ export function ColorEditorDialog({
         didAutoEnable.current = true;
         onToggleOverride(keyIndex);
       }
-      onColorChange(keyIndex, slot, h, s, v);
+      // In single mode, apply to both slots so they stay in sync
+      if (!toggleMode) {
+        onColorChange(keyIndex, "A", h, s, v);
+        onColorChange(keyIndex, "B", h, s, v);
+      } else {
+        onColorChange(keyIndex, slot, h, s, v);
+      }
     },
-    [config.override_enabled, keyIndex, slot, onColorChange, onToggleOverride],
+    [config.override_enabled, keyIndex, slot, toggleMode, onColorChange, onToggleOverride],
   );
-
-  const handleCopyToOtherSlot = () => {
-    if (!config.override_enabled) {
-      onToggleOverride(keyIndex);
-    }
-    const targetSlot: ActiveSlot = slot === "A" ? "B" : "A";
-    onColorChange(keyIndex, targetSlot, color.h, color.s, color.v);
-  };
 
   const handleResetToDevice = () => {
     if (config.override_enabled) {
       didAutoEnable.current = false;
       onToggleOverride(keyIndex);
+    }
+  };
+
+  const handleToggleModeChange = () => {
+    if (!toggleMode) {
+      // Turning ON: keep current colors as-is for independent editing
+      setToggleMode(true);
+    } else {
+      // Turning OFF: sync slot B to match slot A
+      const a = config.slot_a;
+      onColorChange(keyIndex, "B", a.h, a.s, a.v);
+      setSlot(editSlot);
+      setToggleMode(false);
     }
   };
 
@@ -90,22 +103,24 @@ export function ColorEditorDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {/* Preview: dual-swatch showing both slots */}
+        {/* Preview bar */}
         <div className="flex items-center gap-3">
           <div className="flex rounded-lg overflow-hidden border border-white/15">
-            <div
-              className="w-8 h-8"
-              style={{
-                backgroundColor: hsvToRgb(config.slot_a.h, config.slot_a.s, config.slot_a.v),
-              }}
-            />
-            <div className="w-px bg-black/30" />
-            <div
-              className="w-8 h-8"
-              style={{
-                backgroundColor: hsvToRgb(config.slot_b.h, config.slot_b.s, config.slot_b.v),
-              }}
-            />
+            {toggleMode ? (
+              /* Toggle mode: show both slots with labels */
+              <>
+                <div className="relative w-10 h-8" style={{ backgroundColor: hsvToRgb(config.slot_a.h, config.slot_a.s, config.slot_a.v) }}>
+                  <span className="absolute bottom-0.5 left-1 font-pixel text-[7px] text-white/60 drop-shadow-[0_1px_2px_rgba(0,0,0,1)]">A</span>
+                </div>
+                <div className="w-px bg-black/30" />
+                <div className="relative w-10 h-8" style={{ backgroundColor: hsvToRgb(config.slot_b.h, config.slot_b.s, config.slot_b.v) }}>
+                  <span className="absolute bottom-0.5 right-1 font-pixel text-[7px] text-white/60 drop-shadow-[0_1px_2px_rgba(0,0,0,1)]">B</span>
+                </div>
+              </>
+            ) : (
+              /* Single mode: one swatch */
+              <div className="w-10 h-8" style={{ backgroundColor: previewColor }} />
+            )}
           </div>
           <div className="flex-1">
             <div className="text-[10px] text-white/50 tabular-nums font-medium">
@@ -123,46 +138,96 @@ export function ColorEditorDialog({
           )}
         </div>
 
-        {/* Slot switcher with copy button */}
-        <div className="flex items-center gap-2">
-          <div className="flex-1 flex gap-1 p-0.5 rounded-lg bg-[#0d0d0f] border border-white/8">
-            {(["A", "B"] as const).map((s) => (
-              <button
-                key={s}
-                type="button"
-                className={cn(
-                  "flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-[10px] font-bold transition-all",
-                  slot === s
-                    ? "bg-white/10 text-white/90 border border-white/15"
-                    : "text-white/30 border border-transparent hover:text-white/50",
-                )}
-                onClick={() => setSlot(s)}
-              >
-                <span
-                  className="w-2 h-2 rounded-sm border border-white/20"
-                  style={{
-                    backgroundColor:
-                      s === "A"
-                        ? hsvToRgb(config.slot_a.h, config.slot_a.s, config.slot_a.v)
-                        : hsvToRgb(config.slot_b.h, config.slot_b.s, config.slot_b.v),
-                  }}
-                />
-                Slot {s}
-              </button>
-            ))}
-          </div>
-
-          {/* Copy to other slot */}
-          <button
-            type="button"
-            className="flex items-center gap-1 px-2 py-1.5 rounded-md text-[9px] font-medium text-white/25 hover:text-white/60 hover:bg-white/[0.06] border border-white/8 transition-smooth"
-            onClick={handleCopyToOtherSlot}
-            title={`Copy current color to Slot ${slot === "A" ? "B" : "A"}`}
+        {/* Toggle mode switch */}
+        <button
+          type="button"
+          className={cn(
+            "flex items-center gap-2.5 w-full rounded-lg border px-3 py-2 transition-smooth",
+            toggleMode
+              ? "border-violet-500/20 bg-violet-500/[0.06]"
+              : "border-white/[0.06] bg-transparent hover:bg-white/[0.02]",
+          )}
+          onClick={handleToggleModeChange}
+        >
+          <div
+            className={cn(
+              "w-7 h-[16px] rounded-full p-[2px] transition-all duration-150",
+              toggleMode ? "bg-violet-400/90" : "bg-white/12",
+            )}
           >
-            <Copy className="w-2.5 h-2.5" />
-            {slot === "A" ? "A>B" : "B>A"}
-          </button>
-        </div>
+            <div
+              className={cn(
+                "w-3 h-3 rounded-full transition-all duration-150",
+                toggleMode
+                  ? "translate-x-[12px] bg-white"
+                  : "translate-x-0 bg-white/35",
+              )}
+            />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <ToggleRight className={cn("w-3 h-3", toggleMode ? "text-violet-400/70" : "text-white/20")} />
+            <span className={cn("text-[10px] font-medium", toggleMode ? "text-violet-300/70" : "text-white/30")}>
+              Toggle mode
+            </span>
+          </div>
+          {toggleMode && (
+            <span className="ml-auto text-[9px] text-violet-300/40">
+              A/B independent
+            </span>
+          )}
+        </button>
+
+        {/* Slot switcher — only in toggle mode */}
+        {toggleMode && (
+          <div className="flex gap-1.5 animate-fade-in">
+            {(["A", "B"] as const).map((s) => {
+              const slotColor = s === "A"
+                ? hsvToRgb(config.slot_a.h, config.slot_a.s, config.slot_a.v)
+                : hsvToRgb(config.slot_b.h, config.slot_b.s, config.slot_b.v);
+              const slotHex = s === "A"
+                ? hsvToHex(config.slot_a.h, config.slot_a.s, config.slot_a.v)
+                : hsvToHex(config.slot_b.h, config.slot_b.s, config.slot_b.v);
+              const isActive = slot === s;
+              return (
+                <button
+                  key={s}
+                  type="button"
+                  className={cn(
+                    "flex-1 flex items-center gap-2 px-3 py-2 rounded-lg border transition-all",
+                    isActive
+                      ? "border-violet-400/30 bg-violet-500/[0.08]"
+                      : "border-white/[0.06] bg-transparent hover:bg-white/[0.02] hover:border-white/10",
+                  )}
+                  onClick={() => setSlot(s)}
+                >
+                  <span
+                    className={cn(
+                      "w-4 h-4 rounded-md border transition-all",
+                      isActive
+                        ? "border-white/40 shadow-[0_0_8px_rgba(255,255,255,0.1)]"
+                        : "border-white/15",
+                    )}
+                    style={{ backgroundColor: slotColor }}
+                  />
+                  <div className="flex flex-col items-start">
+                    <span className={cn(
+                      "text-[10px] font-bold leading-none",
+                      isActive ? "text-white/80" : "text-white/30",
+                    )}>
+                      Slot {s}
+                    </span>
+                    <span className={cn(
+                      "text-[8px] tabular-nums leading-none mt-0.5",
+                      isActive ? "text-white/35" : "text-white/15",
+                    )}>
+                      {slotHex}
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {/* Color picker — always visible */}
         <ColorPicker
