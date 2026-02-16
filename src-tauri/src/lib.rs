@@ -3,7 +3,7 @@ mod profile;
 mod protocol;
 mod state;
 
-use log::error;
+use log::{error, info, warn};
 use protocol::{DeviceInfo, RgbMatrixState};
 use state::{ActiveSlot, AppState, KeyConfig, SharedState, StateSnapshot};
 use tauri::{
@@ -13,18 +13,142 @@ use tauri::{
     AppHandle, Emitter, Manager, State,
 };
 
+// ── QMK keycode → Tauri shortcut string ─────────────────────────────────
+
+/// Convert a QMK keycode (modifier+basic) to a Tauri global shortcut string.
+/// Returns None if the keycode can't be represented as a shortcut.
+/// Uses the Tauri/global_hotkey Display format: "Ctrl+Alt+M" for registration.
+fn qmk_keycode_to_shortcut(keycode: u16) -> Option<String> {
+    let mods = (keycode >> 8) as u8;
+    let basic = (keycode & 0xFF) as u8;
+
+    // Only handle keycodes with modifiers
+    if mods == 0 || basic == 0 {
+        return None;
+    }
+
+    let mut parts = Vec::new();
+    // Left or right Ctrl
+    if mods & 0x11 != 0 { parts.push("Ctrl"); }
+    // Left or right Shift
+    if mods & 0x22 != 0 { parts.push("Shift"); }
+    // Left or right Alt
+    if mods & 0x44 != 0 { parts.push("Alt"); }
+    // Left or right GUI
+    if mods & 0x88 != 0 { parts.push("Super"); }
+
+    let key_name = match basic {
+        0x04..=0x1D => String::from((b'A' + (basic - 0x04)) as char),
+        0x1E..=0x26 => String::from((b'1' + (basic - 0x1E)) as char),
+        0x27 => "0".into(),
+        0x28 => "Enter".into(),
+        0x29 => "Escape".into(),
+        0x2C => "Space".into(),
+        0x3A..=0x45 => format!("F{}", basic - 0x3A + 1),
+        _ => return None,
+    };
+
+    parts.push(&key_name);
+    Some(parts.join("+"))
+}
+
+/// Convert a QMK keycode to the Display format used by Tauri's Shortcut type.
+/// This is the format returned by `format!("{}", shortcut)` in the handler.
+/// Example: "control+alt+KeyM" (lowercase modifiers, "Key" prefix for letters)
+fn qmk_keycode_to_display(keycode: u16) -> Option<String> {
+    let mods = (keycode >> 8) as u8;
+    let basic = (keycode & 0xFF) as u8;
+
+    if mods == 0 || basic == 0 {
+        return None;
+    }
+
+    let mut parts = Vec::new();
+    if mods & 0x11 != 0 { parts.push("control".to_string()); }
+    if mods & 0x22 != 0 { parts.push("shift".to_string()); }
+    if mods & 0x44 != 0 { parts.push("alt".to_string()); }
+    if mods & 0x88 != 0 { parts.push("super".to_string()); }
+
+    let key_name = match basic {
+        0x04..=0x1D => format!("Key{}", (b'A' + (basic - 0x04)) as char),
+        0x1E..=0x26 => format!("Digit{}", (b'1' + (basic - 0x1E)) as char),
+        0x27 => "Digit0".into(),
+        0x28 => "Enter".into(),
+        0x29 => "Escape".into(),
+        0x2C => "Space".into(),
+        0x3A..=0x45 => format!("F{}", basic - 0x3A + 1),
+        _ => return None,
+    };
+
+    parts.push(key_name);
+    Some(parts.join("+"))
+}
+
+/// Convert keymap index (matrix-order) to LED index (snake-wired).
+/// Top row: key 0-3 → LED 0-3 (direct)
+/// Bottom row: key 4-7 → LED 7,6,5,4 (reversed due to snake wiring)
+fn keymap_to_led_index(keymap_idx: usize) -> usize {
+    if keymap_idx < 4 {
+        keymap_idx
+    } else {
+        11 - keymap_idx // 4→7, 5→6, 6→5, 7→4
+    }
+}
+
+/// Register per-key global shortcuts based on actual device keymaps.
+fn register_key_shortcuts(app: &AppHandle, keymaps: &[u16; 8]) {
+    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+
+    // Unregister any previous shortcuts
+    if let Err(e) = app.global_shortcut().unregister_all() {
+        warn!("[shortcuts] Failed to unregister old shortcuts: {}", e);
+    }
+
+    let state = app.state::<SharedState>();
+    let mut st = state.lock().unwrap();
+    st.shortcut_map.clear();
+
+    for (i, &keycode) in keymaps.iter().enumerate() {
+        if let Some(shortcut_str) = qmk_keycode_to_shortcut(keycode) {
+            let display_str = qmk_keycode_to_display(keycode).unwrap_or_default();
+            // Map keymap index → LED index (accounts for snake wiring on bottom row)
+            let led_idx = keymap_to_led_index(i);
+            info!("[shortcuts] keymap={} → led={} keycode=0x{:04X} → \"{}\"",
+                  i, led_idx, keycode, shortcut_str);
+            match app.global_shortcut().register(shortcut_str.as_str()) {
+                Ok(_) => {
+                    st.shortcut_map.insert(display_str, led_idx);
+                }
+                Err(e) => {
+                    error!("[shortcuts] keymap={} register failed: {}", i, e);
+                }
+            }
+        } else {
+            info!("[shortcuts] keymap={} keycode=0x{:04X} → not mappable", i, keycode);
+        }
+    }
+    info!("[shortcuts] Registered {} per-key shortcuts", st.shortcut_map.len());
+}
+
 // ── Helpers ─────────────────────────────────────────────────────────────
 
-/// Apply color for a single key to the device, respecting override_enabled.
-fn apply_key_to_device(dev: &hid::Deck8Device, key_index: u8, key: &KeyConfig, slot: ActiveSlot) {
+/// Apply color for a single key to the device, using the key's own active_slot.
+fn apply_key_to_device(dev: &hid::Deck8Device, key_index: u8, key: &KeyConfig) {
     if key.override_enabled {
-        let color = match slot {
+        let color = match key.active_slot {
             ActiveSlot::A => &key.slot_a,
             ActiveSlot::B => &key.slot_b,
         };
-        let _ = dev.set_key_color(key_index, color);
+        info!("[apply] key={} slot={:?} override=ON h={} s={} v={}",
+              key_index, key.active_slot, color.h, color.s, color.v);
+        if let Err(e) = dev.set_key_color(key_index, color) {
+            error!("[apply] key={} set_key_color FAILED: {:#}", key_index, e);
+        }
     } else {
-        let _ = dev.disable_override(key_index);
+        info!("[apply] key={} override=OFF → disable", key_index);
+        if let Err(e) = dev.disable_override(key_index) {
+            error!("[apply] key={} disable_override FAILED: {:#}", key_index, e);
+        }
     }
 }
 
@@ -35,22 +159,28 @@ fn persist_keys(keys: &[KeyConfig; 8]) {
     }
 }
 
-/// Apply all 8 keys to device, respecting override_enabled.
-fn apply_all_to_device(dev: &hid::Deck8Device, keys: &[KeyConfig; 8], slot: ActiveSlot) {
+/// Apply all 8 keys to device, using each key's own active_slot.
+fn apply_all_to_device(dev: &hid::Deck8Device, keys: &[KeyConfig; 8]) {
     for i in 0..8 {
-        apply_key_to_device(dev, i as u8, &keys[i], slot);
+        apply_key_to_device(dev, i as u8, &keys[i]);
     }
 }
 
 // ── Tauri Commands ──────────────────────────────────────────────────────
 
 #[tauri::command]
-fn connect_device(state: State<SharedState>) -> bool {
+fn connect_device(app: AppHandle, state: State<SharedState>) -> bool {
     let mut s = state.lock().unwrap();
     match hid::Deck8Device::open() {
         Ok(dev) => {
+            let mut keymaps_copy = [0u16; 8];
             match dev.read_all_keycodes() {
-                Ok(keymaps) => s.keymaps = keymaps,
+                Ok(keymaps) => {
+                    s.keymaps = keymaps;
+                    keymaps_copy = keymaps;
+                    info!("[connect] Keymaps: {:?}",
+                          keymaps.iter().map(|k| format!("0x{:04X}", k)).collect::<Vec<_>>());
+                }
                 Err(e) => error!("Failed to read keymaps: {e:#}"),
             }
             match dev.get_device_info() {
@@ -62,14 +192,22 @@ fn connect_device(state: State<SharedState>) -> bool {
                 Err(e) => error!("Failed to read RGB state: {e:#}"),
             }
             s.device = Some(dev);
-            // Re-apply only keys that have override enabled (persisted from last session)
+            // Sync ALL 8 keys on connect: enable overrides we want, disable the rest.
             if let Some(ref dev) = s.device {
-                for i in 0..8 {
-                    if s.keys[i].override_enabled {
-                        apply_key_to_device(dev, i as u8, &s.keys[i], s.active_slot);
-                    }
+                info!("[connect] Syncing all 8 keys to device...");
+                for (i, k) in s.keys.iter().enumerate() {
+                    info!("[connect]   key={} override={} slot={:?}", i, k.override_enabled, k.active_slot);
+                }
+                apply_all_to_device(dev, &s.keys);
+                info!("[connect] Saving clean state to EEPROM...");
+                if let Err(e) = dev.custom_save() {
+                    error!("[connect] custom_save FAILED: {:#}", e);
                 }
             }
+            // Release lock before registering shortcuts (which also locks state)
+            drop(s);
+            // Register per-key shortcuts based on actual device keymaps
+            register_key_shortcuts(&app, &keymaps_copy);
             true
         }
         Err(e) => {
@@ -101,13 +239,14 @@ fn set_key_color(
         return Err("key_index out of range".into());
     }
     let color = protocol::HsvColor { h, s, v };
-    match slot.as_str() {
-        "A" => st.keys[key_index].slot_a = color,
-        "B" => st.keys[key_index].slot_b = color,
+    let parsed_slot = match slot.as_str() {
+        "A" => { st.keys[key_index].slot_a = color; ActiveSlot::A },
+        "B" => { st.keys[key_index].slot_b = color; ActiveSlot::B },
         _ => return Err("slot must be A or B".into()),
     };
-    // Always send to device when override is enabled — the firmware has one color
-    // per key (no A/B concept), so we always push the currently-edited color.
+    // Update the key's active slot to match whichever slot was just edited
+    st.keys[key_index].active_slot = parsed_slot;
+    // Always send to device when override is enabled
     if st.keys[key_index].override_enabled {
         if let Some(ref dev) = st.device {
             dev.set_key_color(key_index as u8, &color)
@@ -120,23 +259,57 @@ fn set_key_color(
 
 #[tauri::command]
 fn toggle_slot(state: State<SharedState>) -> Result<String, String> {
+    info!("⚠️ [GLOBAL IPC] toggle_slot command called!");
     let mut st = state.lock().unwrap();
+    // Toggle global indicator
     st.active_slot = match st.active_slot {
         ActiveSlot::A => ActiveSlot::B,
         ActiveSlot::B => ActiveSlot::A,
     };
     let new_slot = st.active_slot;
-    if let Some(ref dev) = st.device {
-        apply_all_to_device(dev, &st.keys, new_slot);
+    // Toggle each key's individual slot
+    for key in st.keys.iter_mut() {
+        key.active_slot = match key.active_slot {
+            ActiveSlot::A => ActiveSlot::B,
+            ActiveSlot::B => ActiveSlot::A,
+        };
     }
+    if let Some(ref dev) = st.device {
+        apply_all_to_device(dev, &st.keys);
+    }
+    persist_keys(&st.keys);
     Ok(new_slot.to_string())
+}
+
+#[tauri::command]
+fn toggle_key_slot(
+    state: State<SharedState>,
+    key_index: usize,
+) -> Result<StateSnapshot, String> {
+    let mut st = state.lock().unwrap();
+    if key_index >= 8 {
+        return Err("key_index out of range".into());
+    }
+    let old = st.keys[key_index].active_slot;
+    st.keys[key_index].active_slot = match old {
+        ActiveSlot::A => ActiveSlot::B,
+        ActiveSlot::B => ActiveSlot::A,
+    };
+    let new = st.keys[key_index].active_slot;
+    info!("[PER-KEY TOGGLE] key={} {:?}→{:?} override={}",
+          key_index, old, new, st.keys[key_index].override_enabled);
+    if let Some(ref dev) = st.device {
+        apply_key_to_device(dev, key_index as u8, &st.keys[key_index]);
+    }
+    persist_keys(&st.keys);
+    Ok(st.snapshot())
 }
 
 #[tauri::command]
 fn apply_colors(state: State<SharedState>) -> Result<(), String> {
     let st = state.lock().unwrap();
     if let Some(ref dev) = st.device {
-        apply_all_to_device(dev, &st.keys, st.active_slot);
+        apply_all_to_device(dev, &st.keys);
     }
     Ok(())
 }
@@ -199,7 +372,7 @@ fn set_key_override(
     }
     st.keys[key_index].override_enabled = enabled;
     if let Some(ref dev) = st.device {
-        apply_key_to_device(dev, key_index as u8, &st.keys[key_index], st.active_slot);
+        apply_key_to_device(dev, key_index as u8, &st.keys[key_index]);
         // Persist per-key overrides to device EEPROM
         let _ = dev.custom_save();
     }
@@ -212,7 +385,7 @@ fn restore_defaults(state: State<SharedState>) -> Result<StateSnapshot, String> 
     let mut st = state.lock().unwrap();
     st.keys = std::array::from_fn(|_| KeyConfig::default());
     if let Some(ref dev) = st.device {
-        apply_all_to_device(dev, &st.keys, st.active_slot);
+        apply_all_to_device(dev, &st.keys);
         let _ = dev.custom_save();
     }
     persist_keys(&st.keys);
@@ -260,7 +433,7 @@ fn load_profile(state: State<SharedState>, name: String) -> Result<StateSnapshot
     st.current_profile_name = Some(name);
     // Apply colors to device
     if let Some(ref dev) = st.device {
-        apply_all_to_device(dev, &st.keys, st.active_slot);
+        apply_all_to_device(dev, &st.keys);
         let _ = dev.custom_save();
     }
     persist_keys(&st.keys);
@@ -439,9 +612,39 @@ fn save_rgb_matrix(state: State<SharedState>) -> Result<(), String> {
     }
 }
 
-// ── Toggle helper (used by both command and hotkey) ─────────────────────
+// ── Per-key toggle (triggered by physical keypress via global shortcut) ──
+
+fn do_toggle_key(app: &AppHandle, key_index: usize) {
+    let state = app.state::<SharedState>();
+    let snapshot = {
+        let mut st = state.lock().unwrap();
+        if key_index >= 8 { return; }
+
+        let old = st.keys[key_index].active_slot;
+        st.keys[key_index].active_slot = match old {
+            ActiveSlot::A => ActiveSlot::B,
+            ActiveSlot::B => ActiveSlot::A,
+        };
+        let new_slot = st.keys[key_index].active_slot;
+
+        info!("[KEY-SHORTCUT] key={} {:?}→{:?} override={}",
+              key_index, old, new_slot, st.keys[key_index].override_enabled);
+
+        if let Some(ref dev) = st.device {
+            apply_key_to_device(dev, key_index as u8, &st.keys[key_index]);
+        }
+        persist_keys(&st.keys);
+        st.snapshot()
+    };
+
+    // Emit event so frontend updates its state
+    let _ = app.emit("state-updated", &snapshot);
+}
+
+// ── Global toggle helper (used by tray menu) ────────────────────────────
 
 fn do_toggle(app: &AppHandle) -> Result<String, String> {
+    info!("⚠️ [GLOBAL TOGGLE] do_toggle() called — this toggles ALL keys!");
     let state = app.state::<SharedState>();
     let result = {
         let mut st = state.lock().unwrap();
@@ -450,11 +653,20 @@ fn do_toggle(app: &AppHandle) -> Result<String, String> {
             ActiveSlot::B => ActiveSlot::A,
         };
         let new_slot = st.active_slot;
-        if let Some(ref dev) = st.device {
-            apply_all_to_device(dev, &st.keys, new_slot);
+        // Toggle each key's individual slot
+        for key in st.keys.iter_mut() {
+            key.active_slot = match key.active_slot {
+                ActiveSlot::A => ActiveSlot::B,
+                ActiveSlot::B => ActiveSlot::A,
+            };
         }
+        if let Some(ref dev) = st.device {
+            apply_all_to_device(dev, &st.keys);
+        }
+        persist_keys(&st.keys);
         new_slot.to_string()
     };
+    info!("⚠️ [GLOBAL TOGGLE] emitting slot-toggled={}", result);
     let _ = app.emit("slot-toggled", &result);
     Ok(result)
 }
@@ -482,9 +694,7 @@ pub fn run() {
             // Register plugins
             #[cfg(desktop)]
             {
-                use tauri_plugin_global_shortcut::{
-                    GlobalShortcutExt, ShortcutState,
-                };
+                use tauri_plugin_global_shortcut::ShortcutState;
 
                 // Autostart plugin
                 app.handle().plugin(
@@ -493,18 +703,29 @@ pub fn run() {
                         .build(),
                 )?;
 
-                // Global shortcut plugin
+                // Per-key global shortcut plugin — each physical key toggles
+                // its own LED slot A↔B instead of one shortcut toggling all keys.
                 app.handle().plugin(
                     tauri_plugin_global_shortcut::Builder::new()
-                        .with_handler(move |app, _shortcut, event| {
-                            if event.state() == ShortcutState::Pressed {
-                                let _ = do_toggle(app);
+                        .with_handler(move |app, shortcut, event| {
+                            if event.state() != ShortcutState::Pressed { return; }
+                            let shortcut_str = format!("{}", shortcut);
+                            let state = app.state::<SharedState>();
+                            let key_index = {
+                                let st = state.lock().unwrap();
+                                st.shortcut_map.get(&shortcut_str).copied()
+                            };
+                            if let Some(idx) = key_index {
+                                info!("[SHORTCUT] \"{}\" → key={}", shortcut_str, idx);
+                                do_toggle_key(app, idx);
+                            } else {
+                                warn!("[SHORTCUT] Unmatched: \"{}\"", shortcut_str);
                             }
                         })
                         .build(),
                 )?;
-
-                let _ = app.global_shortcut().register("CmdOrCtrl+Alt+M");
+                // Shortcuts are registered dynamically in connect_device
+                // after reading the actual keymaps from the device.
             }
 
             // System tray
@@ -564,6 +785,7 @@ pub fn run() {
             get_state,
             set_key_color,
             toggle_slot,
+            toggle_key_slot,
             apply_colors,
             disable_all_overrides,
             get_keymap,

@@ -3,7 +3,7 @@ import { KeyGrid } from "@/components/key-grid";
 import { KeyEditorDialog } from "@/components/key-editor-dialog";
 import { keycodeToLabel } from "@/lib/keycodes";
 import { Unplug } from "lucide-react";
-import type { ActiveSlot, KeyConfig } from "@/lib/tauri";
+import type { KeyConfig } from "@/lib/tauri";
 
 /**
  * Maps LED index → matrix index.
@@ -16,7 +16,6 @@ const LED_TO_MATRIX = [0, 1, 2, 3, 7, 6, 5, 4];
 interface KeyAssignmentViewProps {
   keys: KeyConfig[];
   keymaps: number[];
-  editSlot: ActiveSlot;
   connected: boolean;
   onKeycodeChange: (keyIndex: number, keycode: number) => void;
 }
@@ -24,7 +23,6 @@ interface KeyAssignmentViewProps {
 export function KeyAssignmentView({
   keys,
   keymaps,
-  editSlot,
   connected,
   onKeycodeChange,
 }: KeyAssignmentViewProps) {
@@ -51,7 +49,6 @@ export function KeyAssignmentView({
         <div className="surface p-4">
           <KeyGrid
             keys={keys}
-            editSlot={editSlot}
             selectedKey={selectedKey}
             onSelectKey={handleKeyClick}
             mode="keycode"

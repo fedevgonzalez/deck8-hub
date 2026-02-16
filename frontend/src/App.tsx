@@ -16,14 +16,12 @@ export default function App() {
     state,
     selectedKey,
     setSelectedKey,
-    editSlot,
-    setEditSlot,
     profiles,
     connect,
-    toggle,
     updateKeyColor,
     updateKeycode,
     toggleKeyOverride,
+    toggleKeySlot,
     saveCustom,
     restoreDefaults,
     loadProfile,
@@ -52,10 +50,6 @@ export default function App() {
           {/* Unified toolbar: brand + tabs + slot controls + profile + connection */}
           <Toolbar
             connected={state.connected}
-            editSlot={editSlot}
-            activeSlot={state.active_slot}
-            onSlotChange={setEditSlot}
-            onToggle={toggle}
             onReconnect={connect}
             profiles={profiles}
             currentProfile={state.current_profile_name}
@@ -69,7 +63,6 @@ export default function App() {
             <KeyAssignmentView
               keys={state.keys}
               keymaps={state.keymaps}
-              editSlot={editSlot}
               connected={state.connected}
               onKeycodeChange={updateKeycode}
             />
@@ -78,11 +71,11 @@ export default function App() {
           <TabsContent value="color" className="flex flex-col flex-1 min-h-0 overflow-hidden animate-fade-in">
             <ColorView
               keys={state.keys}
-              editSlot={editSlot}
               selectedKey={selectedKey}
               onSelectKey={(i) => setSelectedKey(i === -1 ? null : i)}
               onColorChange={updateKeyColor}
               onToggleOverride={toggleKeyOverride}
+              onToggleKeySlot={toggleKeySlot}
               onSaveCustom={saveCustom}
               connected={state.connected}
             />

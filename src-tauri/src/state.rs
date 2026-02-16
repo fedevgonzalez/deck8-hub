@@ -1,11 +1,13 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::Mutex;
 
 use crate::hid::Deck8Device;
 use crate::protocol::{DeviceInfo, HsvColor, RgbMatrixState};
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Default)]
 pub enum ActiveSlot {
+    #[default]
     A,
     B,
 }
@@ -25,6 +27,8 @@ pub struct KeyConfig {
     pub slot_b: HsvColor,
     #[serde(default)]
     pub override_enabled: bool,
+    #[serde(default)]
+    pub active_slot: ActiveSlot,
 }
 
 impl Default for KeyConfig {
@@ -33,6 +37,7 @@ impl Default for KeyConfig {
             slot_a: HsvColor { h: 0x55, s: 0xFF, v: 0x78 }, // green
             slot_b: HsvColor { h: 0x00, s: 0xFF, v: 0x78 }, // red
             override_enabled: false,
+            active_slot: ActiveSlot::A,
         }
     }
 }
@@ -45,6 +50,8 @@ pub struct AppState {
     pub keymaps: [u16; 8],
     pub device_info: Option<DeviceInfo>,
     pub rgb_matrix: Option<RgbMatrixState>,
+    /// Maps registered shortcut string → key index (0..7)
+    pub shortcut_map: HashMap<String, usize>,
 }
 
 impl Default for AppState {
@@ -57,6 +64,7 @@ impl Default for AppState {
             keymaps: [0u16; 8],
             device_info: None,
             rgb_matrix: None,
+            shortcut_map: HashMap::new(),
         }
     }
 }

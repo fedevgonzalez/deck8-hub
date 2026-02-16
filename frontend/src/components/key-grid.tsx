@@ -1,5 +1,5 @@
 import { KeyCell } from "@/components/key-cell";
-import type { ActiveSlot, KeyConfig } from "@/lib/tauri";
+import type { KeyConfig } from "@/lib/tauri";
 
 /**
  * Maps visual grid position to hardware index.
@@ -10,18 +10,18 @@ const DISPLAY_ORDER = [0, 1, 2, 3, 7, 6, 5, 4];
 
 interface KeyGridProps {
   keys: KeyConfig[];
-  editSlot: ActiveSlot;
   selectedKey: number | null;
   onSelectKey: (index: number) => void;
+  onToggleKeySlot?: (index: number) => void;
   mode?: "color" | "keycode";
   keycodeLabels?: string[];
 }
 
 export function KeyGrid({
   keys,
-  editSlot,
   selectedKey,
   onSelectKey,
+  onToggleKeySlot,
   mode = "color",
   keycodeLabels,
 }: KeyGridProps) {
@@ -31,9 +31,9 @@ export function KeyGrid({
         <div key={hwIndex} className="key-stagger">
         <KeyCell
           config={keys[hwIndex]}
-          editSlot={editSlot}
           isSelected={selectedKey === hwIndex}
           onClick={() => onSelectKey(hwIndex)}
+          onToggleSlot={onToggleKeySlot ? () => onToggleKeySlot(hwIndex) : undefined}
           mode={mode}
           keycodeLabel={keycodeLabels?.[hwIndex]}
         />

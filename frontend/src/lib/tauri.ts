@@ -10,6 +10,7 @@ export interface KeyConfig {
   slot_a: HsvColor;
   slot_b: HsvColor;
   override_enabled: boolean;
+  active_slot: ActiveSlot;
 }
 
 export type ActiveSlot = "A" | "B";
@@ -77,6 +78,11 @@ export function setKeyColor(
 export function toggleSlot(): Promise<string> {
   if (!isTauri) return Promise.resolve("B");
   return tauriInvoke<string>("toggle_slot");
+}
+
+export function toggleKeySlot(keyIndex: number): Promise<StateSnapshot> {
+  if (!isTauri) return Promise.reject("Not in Tauri");
+  return tauriInvoke<StateSnapshot>("toggle_key_slot", { keyIndex });
 }
 
 export function applyColors(): Promise<void> {
@@ -213,6 +219,20 @@ export function onSlotToggled(
   }
   return import("@tauri-apps/api/event").then(({ listen }) =>
     listen<string>("slot-toggled", (event) => {
+      callback(event.payload);
+    }),
+  );
+}
+
+export function onStateUpdated(
+  callback: (snapshot: StateSnapshot) => void,
+): Promise<UnlistenFn> {
+  if (!isTauri) {
+    void callback;
+    return Promise.resolve(() => {});
+  }
+  return import("@tauri-apps/api/event").then(({ listen }) =>
+    listen<StateSnapshot>("state-updated", (event) => {
       callback(event.payload);
     }),
   );

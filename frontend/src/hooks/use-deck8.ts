@@ -5,12 +5,13 @@ import {
   connectDevice,
   getState,
   setKeyColor,
-  toggleSlot,
   listProfiles,
   saveProfile,
   loadProfile,
   deleteProfile,
   onSlotToggled,
+  onStateUpdated,
+  toggleKeySlot as ipcToggleKeySlot,
   setKeycode as ipcSetKeycode,
   setKeyOverride,
   saveCustom,
@@ -33,6 +34,7 @@ const DEFAULT_STATE: StateSnapshot = {
     slot_a: { h: 0x55, s: 0xff, v: 0x78 },
     slot_b: { h: 0x00, s: 0xff, v: 0x78 },
     override_enabled: false,
+    active_slot: "A" as const,
   })),
   active_slot: "A",
   current_profile_name: null,
@@ -44,7 +46,6 @@ const DEFAULT_STATE: StateSnapshot = {
 export function useDeck8() {
   const [state, setState] = useState<StateSnapshot>(DEFAULT_STATE);
   const [selectedKey, setSelectedKey] = useState<number | null>(null);
-  const [editSlot, setEditSlot] = useState<ActiveSlot>("A");
   const [profiles, setProfiles] = useState<string[]>([]);
   const colorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rgbTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -88,28 +89,17 @@ export function useDeck8() {
     [refreshState],
   );
 
-  const toggle = useCallback(async () => {
-    try {
-      const newSlot = await toggleSlot();
-      setState((prev) => ({
-        ...prev,
-        active_slot: newSlot as ActiveSlot,
-      }));
-    } catch (e) {
-      toast.error(`Toggle failed: ${e}`);
-    }
-  }, []);
-
   const updateKeyColor = useCallback(
     (keyIndex: number, slot: ActiveSlot | "both", h: number, s: number, v: number) => {
+      console.log(`[color] key=${keyIndex} slot=${slot} h=${h} s=${s} v=${v}`);
       const color = { h, s, v };
       setState((prev) => {
         const keys = prev.keys.map((k, i) => {
           if (i !== keyIndex) return k;
           if (slot === "both") return { ...k, slot_a: color, slot_b: color };
           return slot === "A"
-            ? { ...k, slot_a: color }
-            : { ...k, slot_b: color };
+            ? { ...k, slot_a: color, active_slot: "A" as const }
+            : { ...k, slot_b: color, active_slot: "B" as const };
         });
         return { ...prev, keys };
       });
@@ -117,14 +107,14 @@ export function useDeck8() {
       if (colorTimer.current) clearTimeout(colorTimer.current);
       colorTimer.current = setTimeout(async () => {
         try {
-          // Send to active slot (or both)
           const activeSlot = slot === "both" ? "A" : slot;
           await setKeyColor(keyIndex, activeSlot, h, s, v);
           if (slot === "both") {
             await setKeyColor(keyIndex, "B", h, s, v);
           }
-        } catch {
-          // silent — device might be disconnected
+          console.log(`[color] key=${keyIndex} IPC OK`);
+        } catch (e) {
+          console.error(`[color] key=${keyIndex} IPC FAIL`, e);
         }
       }, 50);
     },
@@ -151,6 +141,7 @@ export function useDeck8() {
   const toggleKeyOverride = useCallback(
     async (keyIndex: number) => {
       const newEnabled = !state.keys[keyIndex].override_enabled;
+      console.log(`[override] key=${keyIndex} → ${newEnabled ? "ON" : "OFF"}`);
       // Optimistic toggle
       setState((prev) => {
         const keys = prev.keys.map((k, i) => {
@@ -161,12 +152,39 @@ export function useDeck8() {
       });
       try {
         await setKeyOverride(keyIndex, newEnabled);
-      } catch {
-        // Revert on failure
+        console.log(`[override] key=${keyIndex} IPC OK`);
+      } catch (e) {
+        console.error(`[override] key=${keyIndex} IPC FAIL`, e);
         await refreshState();
       }
     },
     [state.keys, refreshState],
+  );
+
+  const doToggleKeySlot = useCallback(
+    async (keyIndex: number) => {
+      setState((prev) => {
+        const oldSlot = prev.keys[keyIndex]?.active_slot ?? "A";
+        const newSlot = oldSlot === "A" ? "B" : "A";
+        console.log(`[slot-toggle] key=${keyIndex} ${oldSlot}→${newSlot}`);
+        toast.info(`Key ${keyIndex + 1}: ${oldSlot} → ${newSlot}`);
+        return {
+          ...prev,
+          keys: prev.keys.map((k, i) => {
+            if (i !== keyIndex) return k;
+            return { ...k, active_slot: newSlot as ActiveSlot };
+          }),
+        };
+      });
+      try {
+        await ipcToggleKeySlot(keyIndex);
+        console.log(`[slot-toggle] key=${keyIndex} IPC OK`);
+      } catch (e) {
+        console.error(`[slot-toggle] key=${keyIndex} IPC FAIL`, e);
+        await refreshState();
+      }
+    },
+    [refreshState],
   );
 
   const doSaveCustom = useCallback(async () => {
@@ -345,35 +363,42 @@ export function useDeck8() {
     connect(true);
     refreshProfiles();
 
-    const unlisten = onSlotToggled((newSlot) => {
+    // Global toggle (tray menu "Toggle LEDs")
+    const unlistenGlobal = onSlotToggled((newSlot) => {
+      console.warn(`[GLOBAL EVENT] slot-toggled: all keys → ${newSlot}`);
       setState((prev) => ({
         ...prev,
         active_slot: newSlot as ActiveSlot,
+        keys: prev.keys.map((k) => ({
+          ...k,
+          active_slot: newSlot as ActiveSlot,
+        })),
       }));
     });
 
+    // Per-key toggle (physical key press on Deck-8)
+    const unlistenState = onStateUpdated((snapshot) => {
+      console.log("[STATE EVENT] state-updated from physical key press");
+      setState(snapshot);
+    });
+
     return () => {
-      unlisten.then((fn) => fn());
+      unlistenGlobal.then((fn) => fn());
+      unlistenState.then((fn) => fn());
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  useEffect(() => {
-    setEditSlot(state.active_slot);
-  }, [state.active_slot]);
 
   return {
     state,
     selectedKey,
     setSelectedKey,
-    editSlot,
-    setEditSlot,
     profiles,
     connect: () => connect(false),
-    toggle,
     updateKeyColor,
     updateKeycode,
     toggleKeyOverride,
+    toggleKeySlot: doToggleKeySlot,
     saveCustom: doSaveCustom,
     restoreDefaults: doRestoreDefaults,
     loadProfile: doLoadProfile,

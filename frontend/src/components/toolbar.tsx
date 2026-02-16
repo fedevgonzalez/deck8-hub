@@ -32,17 +32,11 @@ import {
   SaveAll,
   RotateCcw,
   Trash2,
-  ArrowLeftRight,
 } from "lucide-react";
-import type { ActiveSlot } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 
 interface ToolbarProps {
   connected: boolean;
-  editSlot: ActiveSlot;
-  activeSlot: ActiveSlot;
-  onSlotChange: (slot: ActiveSlot) => void;
-  onToggle: () => void;
   onReconnect: () => void;
   // Profile
   profiles: string[];
@@ -55,10 +49,6 @@ interface ToolbarProps {
 
 export function Toolbar({
   connected,
-  editSlot,
-  activeSlot,
-  onSlotChange,
-  onToggle,
   onReconnect,
   profiles,
   currentProfile,
@@ -120,48 +110,6 @@ export function Toolbar({
 
         {/* Spacer */}
         <div className="flex-1" />
-
-        {/* Slot A/B switcher */}
-        <div className="flex items-center gap-1.5">
-          <div className="flex gap-px bg-white/[0.04] rounded-md p-[2px] border border-white/[0.06]">
-            {(["A", "B"] as const).map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => onSlotChange(s)}
-                className={cn(
-                  "w-6 h-5 rounded-[4px] text-[10px] font-bold transition-all duration-100",
-                  editSlot === s
-                    ? "bg-white text-black shadow-sm"
-                    : "text-white/30 hover:text-white/60",
-                )}
-              >
-                {s}
-              </button>
-            ))}
-          </div>
-
-          {/* Active slot indicator + swap */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                onClick={onToggle}
-                className="flex items-center gap-1 px-1.5 py-1 rounded-md text-white/25 hover:text-white/50 hover:bg-white/[0.04] transition-all duration-100"
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400/80" />
-                <span className="font-pixel text-[9px] text-white/35">{activeSlot}</span>
-                <ArrowLeftRight className="w-2.5 h-2.5" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" sideOffset={6}>
-              <p className="text-[10px]">Swap active slot on device</p>
-            </TooltipContent>
-          </Tooltip>
-        </div>
-
-        {/* Divider */}
-        <div className="w-px h-4 bg-white/[0.08]" />
 
         {/* Profile dropdown */}
         <DropdownMenu>

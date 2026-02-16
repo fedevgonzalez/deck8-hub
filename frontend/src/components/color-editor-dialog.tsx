@@ -18,7 +18,6 @@ interface ColorEditorDialogProps {
   open: boolean;
   keyIndex: number;
   config: KeyConfig;
-  editSlot: ActiveSlot;
   onColorChange: (keyIndex: number, slot: ActiveSlot | "both", h: number, s: number, v: number) => void;
   onToggleOverride: (keyIndex: number) => void;
   onSaveCustom: () => void;
@@ -29,15 +28,15 @@ export function ColorEditorDialog({
   open,
   keyIndex,
   config,
-  editSlot,
   onColorChange,
   onToggleOverride,
   onSaveCustom,
   onClose,
 }: ColorEditorDialogProps) {
-  const [slot, setSlot] = useState<ActiveSlot>(editSlot);
+  const [slot, setSlot] = useState<ActiveSlot>(config.active_slot ?? "A");
   const [toggleMode, setToggleMode] = useState(false);
   const didAutoEnable = useRef(false);
+  const prevOpen = useRef(false);
 
   // Refs to avoid stale closures in drag handlers (mousemove captures onChange at mousedown time)
   const slotRef = useRef(slot);
@@ -45,13 +44,15 @@ export function ColorEditorDialog({
   const toggleModeRef = useRef(toggleMode);
   toggleModeRef.current = toggleMode;
 
+  // Reset state only when dialog OPENS (false→true), not on every active_slot change
   useEffect(() => {
-    if (open) {
-      setSlot(editSlot);
+    if (open && !prevOpen.current) {
+      setSlot(config.active_slot ?? "A");
       setToggleMode(false);
       didAutoEnable.current = false;
     }
-  }, [open, editSlot]);
+    prevOpen.current = open;
+  }, [open, config.active_slot]);
 
   const color = slot === "A" ? config.slot_a : config.slot_b;
   const previewColor = hsvToRgb(color.h, color.s, color.v);
@@ -88,15 +89,16 @@ export function ColorEditorDialog({
   }, [onClose, onSaveCustom]);
 
   const handleToggleModeChange = () => {
+    const keySlot = config.active_slot ?? "A";
     if (!toggleMode) {
-      // Turning ON: start on the current active slot so the picker shows the right color
-      setSlot(editSlot);
+      // Turning ON: start on the key's own active slot
+      setSlot(keySlot);
       setToggleMode(true);
     } else {
       // Turning OFF: sync both slots to match slot A
       const a = config.slot_a;
       onColorChange(keyIndex, "both", a.h, a.s, a.v);
-      setSlot(editSlot);
+      setSlot(keySlot);
       setToggleMode(false);
     }
   };

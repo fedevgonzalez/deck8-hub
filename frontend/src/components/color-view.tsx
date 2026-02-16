@@ -9,22 +9,22 @@ import { toast } from "sonner";
 
 interface ColorViewProps {
   keys: KeyConfig[];
-  editSlot: ActiveSlot;
   selectedKey: number | null;
   onSelectKey: (index: number) => void;
   onColorChange: (keyIndex: number, slot: ActiveSlot | "both", h: number, s: number, v: number) => void;
   onToggleOverride: (keyIndex: number) => void;
+  onToggleKeySlot: (keyIndex: number) => void;
   onSaveCustom: () => void;
   connected: boolean;
 }
 
 export function ColorView({
   keys,
-  editSlot,
   selectedKey,
   onSelectKey,
   onColorChange,
   onToggleOverride,
+  onToggleKeySlot,
   onSaveCustom,
   connected,
 }: ColorViewProps) {
@@ -144,9 +144,9 @@ export function ColorView({
           <div className="relative flex justify-center">
             <KeyGrid
               keys={keys}
-              editSlot={editSlot}
               selectedKey={selectedKey}
               onSelectKey={handleSelectKey}
+              onToggleKeySlot={onToggleKeySlot}
               mode="color"
             />
           </div>
@@ -180,7 +180,6 @@ export function ColorView({
           open={editorOpen}
           keyIndex={selectedKey}
           config={keys[selectedKey]}
-          editSlot={editSlot}
           onColorChange={onColorChange}
           onToggleOverride={onToggleOverride}
           onSaveCustom={onSaveCustom}

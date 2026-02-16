@@ -1,27 +1,28 @@
 import { memo } from "react";
 import { hsvToRgb, hsvToHex } from "@/lib/hsv";
-import type { ActiveSlot, KeyConfig } from "@/lib/tauri";
+import type { KeyConfig } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 import { Cpu } from "lucide-react";
 
 interface KeyCellProps {
   config: KeyConfig;
-  editSlot: ActiveSlot;
   isSelected: boolean;
   onClick: () => void;
+  onToggleSlot?: () => void;
   mode?: "color" | "keycode";
   keycodeLabel?: string;
 }
 
 export const KeyCell = memo(function KeyCell({
   config,
-  editSlot,
   isSelected,
   onClick,
+  onToggleSlot,
   mode = "color",
   keycodeLabel,
 }: KeyCellProps) {
-  const activeColor = editSlot === "A" ? config.slot_a : config.slot_b;
+  const keySlot = config.active_slot ?? "A";
+  const activeColor = keySlot === "A" ? config.slot_a : config.slot_b;
   const bgColor = hsvToRgb(activeColor.h, activeColor.s, activeColor.v);
   const colorA = hsvToRgb(config.slot_a.h, config.slot_a.s, config.slot_a.v);
   const colorB = hsvToRgb(config.slot_b.h, config.slot_b.s, config.slot_b.v);
@@ -88,29 +89,43 @@ export const KeyCell = memo(function KeyCell({
             custom
           </span>
 
-          {/* Dual color swatches — centered */}
-          <div className="flex items-center gap-2 mt-1">
+          {/* Dual color swatches — clickable to toggle A/B */}
+          <div className="flex items-center gap-1 mt-1">
             {(["A", "B"] as const).map((s) => {
-              const isActive = editSlot === s;
+              const isActive = keySlot === s;
               const swatchColor = s === "A" ? colorA : colorB;
               return (
-                <div key={s} className={cn(
-                  "flex flex-col items-center gap-0.5",
-                  isActive ? "opacity-100" : "opacity-50",
-                )}>
+                <button
+                  key={s}
+                  type="button"
+                  className={cn(
+                    "flex flex-col items-center gap-0.5 px-1.5 py-1 rounded-md transition-all",
+                    isActive
+                      ? "opacity-100 bg-white/10"
+                      : "opacity-40 hover:opacity-70 hover:bg-white/[0.04]",
+                  )}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!isActive && onToggleSlot) onToggleSlot();
+                  }}
+                  title={`Switch to slot ${s}`}
+                >
                   <span
                     className={cn(
-                      "w-3 h-3 rounded-[3px] border transition-all",
+                      "w-3.5 h-3.5 rounded-[3px] border transition-all",
                       isActive
                         ? "border-white/70 shadow-[0_0_6px_rgba(255,255,255,0.15)]"
                         : "border-white/25",
                     )}
                     style={{ backgroundColor: swatchColor }}
                   />
-                  <span className="font-pixel text-[7px] text-white/40 drop-shadow-[0_1px_2px_rgba(0,0,0,1)] leading-none">
+                  <span className={cn(
+                    "font-pixel text-[7px] drop-shadow-[0_1px_2px_rgba(0,0,0,1)] leading-none",
+                    isActive ? "text-white/60" : "text-white/30",
+                  )}>
                     {s}
                   </span>
-                </div>
+                </button>
               );
             })}
           </div>

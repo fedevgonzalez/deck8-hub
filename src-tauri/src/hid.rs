@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use hidapi::{HidApi, HidDevice};
-use log::info;
+use log::{info, debug, warn};
 
 use crate::protocol::{
     self, DeviceInfo, HsvColor, RgbMatrixState, PID, USAGE_ID, USAGE_PAGE, VID,
@@ -41,16 +41,24 @@ impl Deck8Device {
 
     /// Set a key's LED color by sending the 3-message sequence:
     /// enable override, set color (H+S), set brightness (V).
+    /// Each report waits for firmware acknowledgment to prevent USB buffer overflow.
     pub fn set_key_color(&self, key_id: u8, color: &HsvColor) -> Result<()> {
-        self.send_report(&protocol::build_enable_override(key_id))?;
-        self.send_report(&protocol::build_set_color(key_id, color))?;
-        self.send_report(&protocol::build_set_brightness(key_id, color.v))?;
+        debug!("[HID] set_key_color led={} h={} s={} v={}", key_id, color.h, color.s, color.v);
+        let resp = self.send_and_receive(&protocol::build_enable_override(key_id), 500)?;
+        if resp[0] == 0xFF { warn!("[HID] enable_override led={} → UNHANDLED", key_id); }
+        let resp = self.send_and_receive(&protocol::build_set_color(key_id, color), 500)?;
+        if resp[0] == 0xFF { warn!("[HID] set_color led={} → UNHANDLED", key_id); }
+        let resp = self.send_and_receive(&protocol::build_set_brightness(key_id, color.v), 500)?;
+        if resp[0] == 0xFF { warn!("[HID] set_brightness led={} → UNHANDLED", key_id); }
         Ok(())
     }
 
     /// Disable per-key override, restoring the original color/animation.
+    /// Waits for firmware acknowledgment.
     pub fn disable_override(&self, key_id: u8) -> Result<()> {
-        self.send_report(&protocol::build_disable_override(key_id))?;
+        debug!("[HID] disable_override led={}", key_id);
+        let resp = self.send_and_receive(&protocol::build_disable_override(key_id), 500)?;
+        if resp[0] == 0xFF { warn!("[HID] disable_override led={} → UNHANDLED", key_id); }
         Ok(())
     }
 
@@ -130,13 +138,15 @@ impl Deck8Device {
     /// Trigger the device indication LED pattern (identify device).
     pub fn device_indication(&self) -> Result<()> {
         let cmd = protocol::build_set_keyboard_value(KB_VALUE_DEVICE_INDICATION, 1);
-        self.send_report(&cmd)?;
+        let _resp = self.send_and_receive(&cmd, 500)?;
         Ok(())
     }
 
     /// Jump to bootloader (device will disconnect and enter DFU mode).
+    /// Note: device may disconnect before response arrives, so we ignore read errors.
     pub fn bootloader_jump(&self) -> Result<()> {
         self.send_report(&protocol::build_bootloader_jump())?;
+        let _ = self.read_response(200); // drain response if any
         Ok(())
     }
 
@@ -199,7 +209,7 @@ impl Deck8Device {
 
     pub fn rgb_set_brightness(&self, val: u8) -> Result<()> {
         let cmd = protocol::build_rgb_set_value_u8(RGB_VAL_BRIGHTNESS, val);
-        self.send_report(&cmd)?;
+        let _resp = self.send_and_receive(&cmd, 500)?;
         Ok(())
     }
 
@@ -211,7 +221,7 @@ impl Deck8Device {
 
     pub fn rgb_set_effect(&self, val: u8) -> Result<()> {
         let cmd = protocol::build_rgb_set_value_u8(RGB_VAL_EFFECT, val);
-        self.send_report(&cmd)?;
+        let _resp = self.send_and_receive(&cmd, 500)?;
         Ok(())
     }
 
@@ -223,7 +233,7 @@ impl Deck8Device {
 
     pub fn rgb_set_speed(&self, val: u8) -> Result<()> {
         let cmd = protocol::build_rgb_set_value_u8(RGB_VAL_EFFECT_SPEED, val);
-        self.send_report(&cmd)?;
+        let _resp = self.send_and_receive(&cmd, 500)?;
         Ok(())
     }
 
@@ -235,21 +245,21 @@ impl Deck8Device {
 
     pub fn rgb_set_color(&self, h: u8, s: u8) -> Result<()> {
         let cmd = protocol::build_rgb_set_color(h, s);
-        self.send_report(&cmd)?;
+        let _resp = self.send_and_receive(&cmd, 500)?;
         Ok(())
     }
 
     /// Save current RGB Matrix settings to EEPROM.
     pub fn rgb_save(&self) -> Result<()> {
         let cmd = protocol::build_rgb_save();
-        self.send_report(&cmd)?;
+        let _resp = self.send_and_receive(&cmd, 500)?;
         Ok(())
     }
 
     /// Save per-key LED overrides to EEPROM.
     pub fn custom_save(&self) -> Result<()> {
         let cmd = protocol::build_custom_save();
-        self.send_report(&cmd)?;
+        let _resp = self.send_and_receive(&cmd, 500)?;
         Ok(())
     }
 
