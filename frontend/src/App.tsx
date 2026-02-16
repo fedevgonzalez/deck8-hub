@@ -29,6 +29,9 @@ export default function App() {
     loadProfile,
     saveProfile,
     deleteProfile,
+    updateRgb,
+    updateRgbColor,
+    saveRgb,
   } = useDeck8();
 
   return (
@@ -86,7 +89,13 @@ export default function App() {
           </TabsContent>
 
           <TabsContent value="settings" className="flex flex-col flex-1 min-h-0 overflow-hidden animate-fade-in">
-            <SettingsView />
+            <SettingsView
+              rgbMatrix={state.rgb_matrix}
+              connected={state.connected}
+              onRgbChange={updateRgb}
+              onRgbColorChange={updateRgbColor}
+              onRgbSave={saveRgb}
+            />
           </TabsContent>
         </Tabs>
 
