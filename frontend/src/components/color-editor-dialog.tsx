@@ -212,7 +212,12 @@ export function ColorEditorDialog({
                       ? "border-violet-400/30 bg-violet-500/[0.08]"
                       : "border-white/[0.06] bg-transparent hover:bg-white/[0.02] hover:border-white/10",
                   )}
-                  onClick={() => setSlot(s)}
+                  onClick={() => {
+                    setSlot(s);
+                    // Push this slot's color to the device immediately
+                    const c = s === "A" ? config.slot_a : config.slot_b;
+                    onColorChange(keyIndex, s, c.h, c.s, c.v);
+                  }}
                 >
                   <span
                     className={cn(

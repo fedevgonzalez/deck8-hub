@@ -106,10 +106,9 @@ fn set_key_color(
         "B" => st.keys[key_index].slot_b = color,
         _ => return Err("slot must be A or B".into()),
     };
-    // If this is the active slot and override is enabled, send to device immediately
-    let is_active = (slot == "A" && st.active_slot == ActiveSlot::A)
-        || (slot == "B" && st.active_slot == ActiveSlot::B);
-    if is_active && st.keys[key_index].override_enabled {
+    // Always send to device when override is enabled — the firmware has one color
+    // per key (no A/B concept), so we always push the currently-edited color.
+    if st.keys[key_index].override_enabled {
         if let Some(ref dev) = st.device {
             dev.set_key_color(key_index as u8, &color)
                 .map_err(|e| e.to_string())?;

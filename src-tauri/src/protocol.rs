@@ -272,10 +272,11 @@ pub fn build_rgb_save() -> [u8; 32] {
     buf
 }
 
-/// Save per-key LED overrides to EEPROM (custom channel 0x07).
+/// Save per-key LED overrides to EEPROM.
+/// Channel 0x00 = id_custom_channel in QMK VIA (not CUSTOM_CHANNEL which is the command byte).
 pub fn build_custom_save() -> [u8; 32] {
     let mut buf = [0u8; 32];
     buf[0] = VIA_CUSTOM_SAVE;
-    buf[1] = CUSTOM_CHANNEL;
+    buf[1] = 0x00; // id_custom_channel
     buf
 }
