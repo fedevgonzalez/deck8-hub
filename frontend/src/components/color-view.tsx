@@ -12,7 +12,7 @@ interface ColorViewProps {
   editSlot: ActiveSlot;
   selectedKey: number | null;
   onSelectKey: (index: number) => void;
-  onColorChange: (keyIndex: number, slot: ActiveSlot, h: number, s: number, v: number) => void;
+  onColorChange: (keyIndex: number, slot: ActiveSlot | "both", h: number, s: number, v: number) => void;
   onToggleOverride: (keyIndex: number) => void;
   connected: boolean;
 }

@@ -19,7 +19,7 @@ interface ColorEditorDialogProps {
   keyIndex: number;
   config: KeyConfig;
   editSlot: ActiveSlot;
-  onColorChange: (keyIndex: number, slot: ActiveSlot, h: number, s: number, v: number) => void;
+  onColorChange: (keyIndex: number, slot: ActiveSlot | "both", h: number, s: number, v: number) => void;
   onToggleOverride: (keyIndex: number) => void;
   onClose: () => void;
 }
@@ -56,13 +56,8 @@ export function ColorEditorDialog({
         didAutoEnable.current = true;
         onToggleOverride(keyIndex);
       }
-      // In single mode, apply to both slots so they stay in sync
-      if (!toggleMode) {
-        onColorChange(keyIndex, "A", h, s, v);
-        onColorChange(keyIndex, "B", h, s, v);
-      } else {
-        onColorChange(keyIndex, slot, h, s, v);
-      }
+      // In single mode, apply to both slots at once; in toggle mode, only the selected slot
+      onColorChange(keyIndex, toggleMode ? slot : "both", h, s, v);
     },
     [config.override_enabled, keyIndex, slot, toggleMode, onColorChange, onToggleOverride],
   );
@@ -79,9 +74,9 @@ export function ColorEditorDialog({
       // Turning ON: keep current colors as-is for independent editing
       setToggleMode(true);
     } else {
-      // Turning OFF: sync slot B to match slot A
+      // Turning OFF: sync both slots to match slot A
       const a = config.slot_a;
-      onColorChange(keyIndex, "B", a.h, a.s, a.v);
+      onColorChange(keyIndex, "both", a.h, a.s, a.v);
       setSlot(editSlot);
       setToggleMode(false);
     }

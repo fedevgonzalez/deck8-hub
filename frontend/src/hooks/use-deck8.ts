@@ -100,13 +100,15 @@ export function useDeck8() {
   }, []);
 
   const updateKeyColor = useCallback(
-    (keyIndex: number, slot: ActiveSlot, h: number, s: number, v: number) => {
+    (keyIndex: number, slot: ActiveSlot | "both", h: number, s: number, v: number) => {
+      const color = { h, s, v };
       setState((prev) => {
         const keys = prev.keys.map((k, i) => {
           if (i !== keyIndex) return k;
+          if (slot === "both") return { ...k, slot_a: color, slot_b: color };
           return slot === "A"
-            ? { ...k, slot_a: { h, s, v } }
-            : { ...k, slot_b: { h, s, v } };
+            ? { ...k, slot_a: color }
+            : { ...k, slot_b: color };
         });
         return { ...prev, keys };
       });
@@ -114,7 +116,12 @@ export function useDeck8() {
       if (colorTimer.current) clearTimeout(colorTimer.current);
       colorTimer.current = setTimeout(async () => {
         try {
-          await setKeyColor(keyIndex, slot, h, s, v);
+          // Send to active slot (or both)
+          const activeSlot = slot === "both" ? "A" : slot;
+          await setKeyColor(keyIndex, activeSlot, h, s, v);
+          if (slot === "both") {
+            await setKeyColor(keyIndex, "B", h, s, v);
+          }
         } catch {
           // silent — device might be disconnected
         }
