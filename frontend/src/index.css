@@ -9,6 +9,20 @@
   font-display: swap;
 }
 
+@font-face {
+  font-family: "Geist Pixel Square";
+  src: url("/fonts/GeistPixel-Square.woff2") format("woff2");
+  font-weight: 500;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist Pixel Grid";
+  src: url("/fonts/GeistPixel-Grid.woff2") format("woff2");
+  font-weight: 500;
+  font-display: swap;
+}
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
@@ -52,60 +66,52 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
-/* Churrosoft — pure black + white accent */
 :root {
-  --radius: 0.5rem;
-  --background: #000000;
-  --foreground: rgba(255, 255, 255, 0.85);
-  --card: #0a0a0a;
-  --card-foreground: rgba(255, 255, 255, 0.85);
-  --popover: #0a0a0a;
-  --popover-foreground: rgba(255, 255, 255, 0.85);
+  --radius: 0.625rem;
+  --background: #09090b;
+  --foreground: rgba(255, 255, 255, 0.88);
+  --card: #111113;
+  --card-foreground: rgba(255, 255, 255, 0.88);
+  --popover: #111113;
+  --popover-foreground: rgba(255, 255, 255, 0.88);
   --primary: #ffffff;
-  --primary-foreground: #000000;
-  --secondary: #111111;
-  --secondary-foreground: rgba(255, 255, 255, 0.70);
-  --muted: #111111;
-  --muted-foreground: #666666;
+  --primary-foreground: #09090b;
+  --secondary: #1a1a1e;
+  --secondary-foreground: rgba(255, 255, 255, 0.72);
+  --muted: #1a1a1e;
+  --muted-foreground: #71717a;
   --accent: #ffffff;
-  --accent-foreground: #000000;
-  --destructive: #ff3333;
-  --border: rgba(255, 255, 255, 0.08);
-  --input: rgba(255, 255, 255, 0.08);
-  --ring: rgba(255, 255, 255, 0.25);
+  --accent-foreground: #09090b;
+  --destructive: #ef4444;
+  --border: rgba(255, 255, 255, 0.10);
+  --input: rgba(255, 255, 255, 0.10);
+  --ring: rgba(255, 255, 255, 0.30);
   --chart-1: #ffffff;
   --chart-2: #888888;
   --chart-3: #444444;
   --chart-4: #cccccc;
   --chart-5: #666666;
-  --sidebar: #0a0a0a;
-  --sidebar-foreground: rgba(255, 255, 255, 0.85);
+  --sidebar: #111113;
+  --sidebar-foreground: rgba(255, 255, 255, 0.88);
   --sidebar-primary: #ffffff;
-  --sidebar-primary-foreground: #000000;
-  --sidebar-accent: #111111;
-  --sidebar-accent-foreground: rgba(255, 255, 255, 0.85);
-  --sidebar-border: rgba(255, 255, 255, 0.08);
-  --sidebar-ring: rgba(255, 255, 255, 0.25);
-
-  /* Glass vars */
-  --glass-bg: rgba(0, 0, 0, 0.40);
-  --glass-border: rgba(255, 255, 255, 0.12);
-
-  /* Border hierarchy */
-  --border-subtle: rgba(255, 255, 255, 0.04);
-  --border-default: rgba(255, 255, 255, 0.08);
-  --border-strong: rgba(255, 255, 255, 0.12);
-  --border-emphasis: rgba(255, 255, 255, 0.20);
+  --sidebar-primary-foreground: #09090b;
+  --sidebar-accent: #1a1a1e;
+  --sidebar-accent-foreground: rgba(255, 255, 255, 0.88);
+  --sidebar-border: rgba(255, 255, 255, 0.10);
+  --sidebar-ring: rgba(255, 255, 255, 0.30);
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
+  html, body, #root {
+    height: 100%;
+  }
   body {
     @apply bg-background text-foreground;
-    font-family: "Geist Mono", ui-monospace, "SF Mono", "Cascadia Mono",
-      "Segoe UI Mono", monospace;
+    font-family: "Geist Pixel Grid", "Geist Mono", ui-monospace, "SF Mono",
+      "Cascadia Mono", "Segoe UI Mono", monospace;
     font-size: 13px;
     letter-spacing: -0.01em;
     margin: 0;
@@ -115,103 +121,332 @@
   }
 }
 
-/* Noise texture overlay */
+/* Pixel font utility */
+.font-pixel {
+  font-family: "Geist Pixel Grid", "Geist Mono", ui-monospace, monospace;
+}
+
+/* Noise texture */
 body::before {
   content: "";
   position: fixed;
   inset: 0;
   z-index: 9999;
   pointer-events: none;
-  opacity: 0.015;
+  opacity: 0.025;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
 }
 
-/* Animations */
+/* ═══════════════════════════════════════════════════
+   Animations
+   ═══════════════════════════════════════════════════ */
+
 @keyframes fade-in {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
-
 @keyframes scale-in {
-  from {
-    opacity: 0;
-    transform: scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes pulse-subtle {
+  0%, 100% { opacity: 0.2; }
+  50% { opacity: 0.35; }
+}
+@keyframes breathe-ab {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+@keyframes spin-once {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+@keyframes sync-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.4); }
+  70% { box-shadow: 0 0 0 6px rgba(52, 211, 153, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0); }
+}
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
 }
 
-.animate-fade-in {
-  animation: fade-in 200ms ease-out both;
+.animate-fade-in { animation: fade-in 200ms ease-out both; }
+.animate-scale-in { animation: scale-in 150ms ease-out both; }
+.animate-pulse-subtle { animation: pulse-subtle 2.5s ease-in-out infinite; }
+.animate-breathe { animation: breathe-ab 2s ease-in-out infinite; }
+.animate-spin-once { animation: spin-once 600ms ease-in-out; }
+.animate-sync-pulse { animation: sync-pulse 1s ease-out; }
+.transition-smooth { transition: all 120ms ease-out; }
+
+/* Loading skeleton shimmer */
+.skeleton {
+  background: linear-gradient(90deg,
+    rgba(255,255,255,0.04) 25%,
+    rgba(255,255,255,0.08) 50%,
+    rgba(255,255,255,0.04) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: 6px;
 }
 
-.animate-scale-in {
-  animation: scale-in 150ms ease-out both;
+/* ═══════════════════════════════════════════════════
+   Surfaces & Panels
+   ═══════════════════════════════════════════════════ */
+
+.surface {
+  background: #111113;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 12px;
+}
+.surface-raised {
+  background: #161618;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
 }
 
-.transition-smooth {
-  transition: all 100ms ease-out;
+/* Unified card for color view & settings */
+.color-panel,
+.settings-panel {
+  background: #111113;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.03) inset,
+    0 0 0 1px rgba(0, 0, 0, 0.5),
+    0 8px 32px -8px rgba(0, 0, 0, 0.6);
 }
 
-/* Custom slider track gradients */
+/* CRT scanline overlay for the color panel */
+.color-panel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0px,
+    transparent 2px,
+    rgba(0, 0, 0, 0.04) 2px,
+    rgba(0, 0, 0, 0.04) 4px
+  );
+  mix-blend-mode: multiply;
+}
+
+/* PCB trace grid background for the key area */
+.pcb-grid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+/* ═══════════════════════════════════════════════════
+   Toolbar
+   ═══════════════════════════════════════════════════ */
+
+.toolbar {
+  background: #0c0c0e;
+  position: relative;
+}
+
+/* Subtle bottom shadow on toolbar */
+.toolbar::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    rgba(255, 255, 255, 0.06) 20%,
+    rgba(255, 255, 255, 0.06) 80%,
+    transparent
+  );
+}
+
+/* ═══════════════════════════════════════════════════
+   Key Cells
+   ═══════════════════════════════════════════════════ */
+
+/* Standby LED pulse for OFF keys */
+@keyframes standby-led {
+  0%, 100% { opacity: 0.15; }
+  50% { opacity: 0.4; }
+}
+.standby-led {
+  animation: standby-led 3s ease-in-out infinite;
+}
+
+/* Badge appear animation for CUSTOM badge */
+@keyframes badge-appear {
+  from { opacity: 0; transform: scale(0.8); }
+  to { opacity: 1; transform: scale(1); }
+}
+.custom-badge {
+  animation: badge-appear 200ms ease-out;
+}
+
+/* Power-up glow burst when override turns ON */
+@keyframes key-power-up {
+  0% { box-shadow: 0 0 0 0 var(--glow-color, rgba(52, 211, 153, 0.4)); }
+  50% { box-shadow: 0 0 16px 2px var(--glow-color, rgba(52, 211, 153, 0.3)); }
+  100% { box-shadow: none; }
+}
+
+/* Staggered grid reveal */
+.key-stagger { animation: fade-in 250ms ease-out both; }
+.key-stagger:nth-child(1) { animation-delay: 30ms; }
+.key-stagger:nth-child(2) { animation-delay: 60ms; }
+.key-stagger:nth-child(3) { animation-delay: 90ms; }
+.key-stagger:nth-child(4) { animation-delay: 120ms; }
+.key-stagger:nth-child(5) { animation-delay: 150ms; }
+.key-stagger:nth-child(6) { animation-delay: 180ms; }
+.key-stagger:nth-child(7) { animation-delay: 210ms; }
+.key-stagger:nth-child(8) { animation-delay: 240ms; }
+
+/* Color mode cell */
+.key-cell-color {
+  transition: transform 100ms ease-out, border-color 100ms ease-out;
+}
+.key-cell-color:hover {
+  transform: translateY(-1px);
+}
+.key-cell-color:active {
+  transform: translateY(0);
+}
+
+/* Toggle strip hover highlight */
+.key-toggle-strip {
+  position: relative;
+}
+.key-toggle-strip::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.03) 0%,
+    transparent 100%
+  );
+  transition: opacity 100ms ease-out;
+  pointer-events: none;
+}
+.key-toggle-strip:hover::before {
+  opacity: 1;
+}
+
+/* Selected key ring */
+.key-selected {
+  box-shadow:
+    0 0 0 2px #09090b,
+    0 0 0 3.5px rgba(255, 255, 255, 0.60);
+}
+
+/* Stripe pattern for disabled keys */
+.key-stripes {
+  background-image: repeating-linear-gradient(
+    -45deg, transparent, transparent 4px,
+    rgba(255, 255, 255, 0.06) 4px, rgba(255, 255, 255, 0.06) 8px
+  ) !important;
+  background-color: rgba(255, 255, 255, 0.03) !important;
+}
+
+/* Diagonal stripe pattern - smaller, for inline badges */
+.stripes-sm {
+  background-image: repeating-linear-gradient(
+    -45deg, transparent, transparent 2px,
+    rgba(255, 255, 255, 0.08) 2px, rgba(255, 255, 255, 0.08) 4px
+  );
+}
+
+/* ═══════════════════════════════════════════════════
+   Sync Button
+   ═══════════════════════════════════════════════════ */
+
+.sync-button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* ═══════════════════════════════════════════════════
+   Sliders
+   ═══════════════════════════════════════════════════ */
+
+/* Hue slider gradient */
 .slider-hue [data-slot="slider-range"],
 .slider-hue [data-slot="slider-track"] {
   background: linear-gradient(
     to right,
-    hsl(0, 100%, 50%),
-    hsl(30, 100%, 50%),
-    hsl(60, 100%, 50%),
-    hsl(90, 100%, 50%),
-    hsl(120, 100%, 50%),
-    hsl(150, 100%, 50%),
-    hsl(180, 100%, 50%),
-    hsl(210, 100%, 50%),
-    hsl(240, 100%, 50%),
-    hsl(270, 100%, 50%),
-    hsl(300, 100%, 50%),
-    hsl(330, 100%, 50%),
+    hsl(0, 100%, 50%), hsl(30, 100%, 50%), hsl(60, 100%, 50%),
+    hsl(90, 100%, 50%), hsl(120, 100%, 50%), hsl(150, 100%, 50%),
+    hsl(180, 100%, 50%), hsl(210, 100%, 50%), hsl(240, 100%, 50%),
+    hsl(270, 100%, 50%), hsl(300, 100%, 50%), hsl(330, 100%, 50%),
     hsl(360, 100%, 50%)
   ) !important;
 }
 
-.slider-sat [data-slot="slider-range"],
-.slider-sat [data-slot="slider-track"] {
-  background: var(--sat-gradient) !important;
-}
-
-.slider-val [data-slot="slider-range"],
-.slider-val [data-slot="slider-track"] {
-  background: var(--val-gradient) !important;
-}
-
-/* Slider track rounded ends */
+/* Rounded slider tracks */
 [data-slot="slider-track"] {
   border-radius: 9999px;
 }
 
-/* Selection ring for selected key — clean double ring */
-.key-selected {
-  box-shadow:
-    0 0 0 2px rgba(0, 0, 0, 0.8),
-    0 0 0 3.5px rgba(255, 255, 255, 0.50);
+/* ═══════════════════════════════════════════════════
+   Misc
+   ═══════════════════════════════════════════════════ */
+
+/* Terminal cursor blink */
+@keyframes cursor-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+.terminal-cursor {
+  animation: cursor-blink 1s step-end infinite;
 }
 
-/* Diagonal stripe pattern for "none" override keys */
-.key-stripes {
-  background-image: repeating-linear-gradient(
-    -45deg,
-    transparent,
-    transparent 4px,
-    rgba(255, 255, 255, 0.06) 4px,
-    rgba(255, 255, 255, 0.06) 8px
-  ) !important;
-  background-color: rgba(255, 255, 255, 0.03) !important;
+/* Color swatch dual split */
+.swatch-split {
+  position: relative;
+  overflow: hidden;
+  border-radius: 6px;
+}
+.swatch-split::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  bottom: 0;
+  width: 1px;
+  background: rgba(0, 0, 0, 0.3);
+  z-index: 1;
+}
+
+/* Bar grouping -- subtle inset container for button groups */
+.bar-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Collapsible section animation */
+.collapsible-content {
+  overflow: hidden;
+  transition: height 200ms ease-out;
+}
+.collapsible-content[data-state="closed"] {
+  height: 0;
+}
+
+/* Connection overlay dismiss */
+.connection-overlay.hidden {
+  display: none;
 }
