@@ -21,6 +21,7 @@ interface ColorEditorDialogProps {
   editSlot: ActiveSlot;
   onColorChange: (keyIndex: number, slot: ActiveSlot | "both", h: number, s: number, v: number) => void;
   onToggleOverride: (keyIndex: number) => void;
+  onSaveCustom: () => void;
   onClose: () => void;
 }
 
@@ -31,11 +32,18 @@ export function ColorEditorDialog({
   editSlot,
   onColorChange,
   onToggleOverride,
+  onSaveCustom,
   onClose,
 }: ColorEditorDialogProps) {
   const [slot, setSlot] = useState<ActiveSlot>(editSlot);
   const [toggleMode, setToggleMode] = useState(false);
   const didAutoEnable = useRef(false);
+
+  // Refs to avoid stale closures in drag handlers (mousemove captures onChange at mousedown time)
+  const slotRef = useRef(slot);
+  slotRef.current = slot;
+  const toggleModeRef = useRef(toggleMode);
+  toggleModeRef.current = toggleMode;
 
   useEffect(() => {
     if (open) {
@@ -56,10 +64,12 @@ export function ColorEditorDialog({
         didAutoEnable.current = true;
         onToggleOverride(keyIndex);
       }
-      // In single mode, apply to both slots at once; in toggle mode, only the selected slot
-      onColorChange(keyIndex, toggleMode ? slot : "both", h, s, v);
+      // Use refs to always read the latest slot/toggleMode (avoids stale closures during drag)
+      const currentSlot = slotRef.current;
+      const currentToggle = toggleModeRef.current;
+      onColorChange(keyIndex, currentToggle ? currentSlot : "both", h, s, v);
     },
-    [config.override_enabled, keyIndex, slot, toggleMode, onColorChange, onToggleOverride],
+    [config.override_enabled, keyIndex, onColorChange, onToggleOverride],
   );
 
   const handleResetToDevice = () => {
@@ -72,8 +82,10 @@ export function ColorEditorDialog({
   const handleClose = useCallback(() => {
     setSlot("A");
     setToggleMode(false);
+    // Persist per-key overrides to device EEPROM on dialog close
+    onSaveCustom();
     onClose();
-  }, [onClose]);
+  }, [onClose, onSaveCustom]);
 
   const handleToggleModeChange = () => {
     if (!toggleMode) {
@@ -233,6 +245,7 @@ export function ColorEditorDialog({
 
         {/* Color picker — always visible */}
         <ColorPicker
+          key={`${keyIndex}-${slot}`}
           keyIndex={keyIndex}
           slot={slot}
           color={color}

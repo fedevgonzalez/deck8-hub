@@ -13,6 +13,7 @@ import {
   onSlotToggled,
   setKeycode as ipcSetKeycode,
   setKeyOverride,
+  saveCustom,
   restoreDefaults,
   deviceIndication,
   bootloaderJump,
@@ -167,6 +168,14 @@ export function useDeck8() {
     },
     [state.keys, refreshState],
   );
+
+  const doSaveCustom = useCallback(async () => {
+    try {
+      await saveCustom();
+    } catch {
+      // silent — device might be disconnected
+    }
+  }, []);
 
   const doRestoreDefaults = useCallback(async () => {
     try {
@@ -365,6 +374,7 @@ export function useDeck8() {
     updateKeyColor,
     updateKeycode,
     toggleKeyOverride,
+    saveCustom: doSaveCustom,
     restoreDefaults: doRestoreDefaults,
     loadProfile: doLoadProfile,
     saveProfile: doSaveProfile,

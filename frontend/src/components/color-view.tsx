@@ -14,6 +14,7 @@ interface ColorViewProps {
   onSelectKey: (index: number) => void;
   onColorChange: (keyIndex: number, slot: ActiveSlot | "both", h: number, s: number, v: number) => void;
   onToggleOverride: (keyIndex: number) => void;
+  onSaveCustom: () => void;
   connected: boolean;
 }
 
@@ -24,6 +25,7 @@ export function ColorView({
   onSelectKey,
   onColorChange,
   onToggleOverride,
+  onSaveCustom,
   connected,
 }: ColorViewProps) {
   const [editorOpen, setEditorOpen] = useState(false);
@@ -181,6 +183,7 @@ export function ColorView({
           editSlot={editSlot}
           onColorChange={onColorChange}
           onToggleOverride={onToggleOverride}
+          onSaveCustom={onSaveCustom}
           onClose={() => setEditorOpen(false)}
         />
       )}

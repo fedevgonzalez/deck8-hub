@@ -201,6 +201,8 @@ fn set_key_override(
     st.keys[key_index].override_enabled = enabled;
     if let Some(ref dev) = st.device {
         apply_key_to_device(dev, key_index as u8, &st.keys[key_index], st.active_slot);
+        // Persist per-key overrides to device EEPROM
+        let _ = dev.custom_save();
     }
     persist_keys(&st.keys);
     Ok(st.snapshot())
@@ -212,6 +214,7 @@ fn restore_defaults(state: State<SharedState>) -> Result<StateSnapshot, String> 
     st.keys = std::array::from_fn(|_| KeyConfig::default());
     if let Some(ref dev) = st.device {
         apply_all_to_device(dev, &st.keys, st.active_slot);
+        let _ = dev.custom_save();
     }
     persist_keys(&st.keys);
     Ok(st.snapshot())
@@ -259,6 +262,7 @@ fn load_profile(state: State<SharedState>, name: String) -> Result<StateSnapshot
     // Apply colors to device
     if let Some(ref dev) = st.device {
         apply_all_to_device(dev, &st.keys, st.active_slot);
+        let _ = dev.custom_save();
     }
     persist_keys(&st.keys);
     Ok(st.snapshot())
@@ -417,6 +421,16 @@ fn set_rgb_color(state: State<SharedState>, h: u8, s: u8) -> Result<(), String> 
 }
 
 #[tauri::command]
+fn save_custom(state: State<SharedState>) -> Result<(), String> {
+    let st = state.lock().unwrap();
+    if let Some(ref dev) = st.device {
+        dev.custom_save().map_err(|e| e.to_string())
+    } else {
+        Err("Not connected".into())
+    }
+}
+
+#[tauri::command]
 fn save_rgb_matrix(state: State<SharedState>) -> Result<(), String> {
     let st = state.lock().unwrap();
     if let Some(ref dev) = st.device {
@@ -567,6 +581,7 @@ pub fn run() {
             eeprom_reset,
             dynamic_keymap_reset,
             macro_reset,
+            save_custom,
             get_rgb_matrix,
             set_rgb_brightness,
             set_rgb_effect,

@@ -161,6 +161,13 @@ export function macroReset(): Promise<void> {
   return tauriInvoke("macro_reset");
 }
 
+// ── Per-key EEPROM persistence ──────────────────────────────────────
+
+export function saveCustom(): Promise<void> {
+  if (!isTauri) return Promise.resolve();
+  return tauriInvoke("save_custom");
+}
+
 // ── RGB Matrix ─────────────────────────────────────────────────────
 
 export function getRgbMatrix(): Promise<RgbMatrixState> {

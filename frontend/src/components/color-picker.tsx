@@ -88,6 +88,9 @@ function SatValArea({
   onChange: (s: number, v: number) => void;
 }) {
   const areaRef = useRef<HTMLDivElement>(null);
+  // Ref to always use latest onChange during drag (avoids stale closure in mousemove listener)
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
 
   const posFromEvent = useCallback(
     (e: MouseEvent | React.MouseEvent) => {
@@ -105,11 +108,11 @@ function SatValArea({
     (e: React.MouseEvent) => {
       e.preventDefault();
       const { s, v } = posFromEvent(e);
-      onChange(s, v);
+      onChangeRef.current(s, v);
 
       const move = (ev: MouseEvent) => {
         const pos = posFromEvent(ev);
-        onChange(pos.s, pos.v);
+        onChangeRef.current(pos.s, pos.v);
       };
       const up = () => {
         window.removeEventListener("mousemove", move);
@@ -118,7 +121,7 @@ function SatValArea({
       window.addEventListener("mousemove", move);
       window.addEventListener("mouseup", up);
     },
-    [posFromEvent, onChange],
+    [posFromEvent],
   );
 
   // cursor position (percentage)

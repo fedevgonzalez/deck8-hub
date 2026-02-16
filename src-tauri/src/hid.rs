@@ -246,6 +246,13 @@ impl Deck8Device {
         Ok(())
     }
 
+    /// Save per-key LED overrides to EEPROM.
+    pub fn custom_save(&self) -> Result<()> {
+        let cmd = protocol::build_custom_save();
+        self.send_report(&cmd)?;
+        Ok(())
+    }
+
     /// Get aggregate RGB Matrix state.
     pub fn rgb_get_state(&self) -> Result<RgbMatrixState> {
         let brightness = self.rgb_get_brightness()?;

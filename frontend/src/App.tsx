@@ -24,6 +24,7 @@ export default function App() {
     updateKeyColor,
     updateKeycode,
     toggleKeyOverride,
+    saveCustom,
     restoreDefaults,
     loadProfile,
     saveProfile,
@@ -79,6 +80,7 @@ export default function App() {
               onSelectKey={(i) => setSelectedKey(i === -1 ? null : i)}
               onColorChange={updateKeyColor}
               onToggleOverride={toggleKeyOverride}
+              onSaveCustom={saveCustom}
               connected={state.connected}
             />
           </TabsContent>

@@ -271,3 +271,11 @@ pub fn build_rgb_save() -> [u8; 32] {
     buf[1] = RGB_MATRIX_CHANNEL;
     buf
 }
+
+/// Save per-key LED overrides to EEPROM (custom channel 0x07).
+pub fn build_custom_save() -> [u8; 32] {
+    let mut buf = [0u8; 32];
+    buf[0] = VIA_CUSTOM_SAVE;
+    buf[1] = CUSTOM_CHANNEL;
+    buf
+}
