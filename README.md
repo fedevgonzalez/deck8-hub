@@ -1,6 +1,6 @@
 # Deck-8 Hub
 
-Desktop configurator for the **Churrosoft Deck-8**, an 8-key macro pad with per-key RGB and QMK firmware.
+Desktop configurator for the **Churrosoft Deck-8**, an 8-key macro pad with per-key RGB and [QMK](https://github.com/qmk/qmk_firmware) firmware.
 
 Built with [Tauri v2](https://tauri.app) (Rust backend) + React + Tailwind CSS + shadcn/ui.
 
@@ -21,7 +21,14 @@ Built with [Tauri v2](https://tauri.app) (Rust backend) + React + Tailwind CSS +
 | **Node.js** | 18+ | [nodejs.org](https://nodejs.org) |
 | **Tauri CLI** | 2.x | `cargo install tauri-cli` |
 
-Windows only (uses `hidapi` with `windows-native` feature and `enigo` for keystroke simulation).
+### Windows
+
+No additional requirements. HID access works out of the box.
+
+### macOS
+
+- **Accessibility permission** — required for keystroke simulation (enigo) and global shortcuts. Grant in **System Preferences > Privacy & Security > Accessibility**.
+- **HID access** — works without extra entitlements for non-sandboxed apps (Tauri default).
 
 ## Setup
 
@@ -48,7 +55,9 @@ cargo tauri dev
 cargo tauri build
 ```
 
-Output: `src-tauri/target/release/deck8-hub.exe`
+Output:
+- **Windows:** `src-tauri/target/release/deck8-hub.exe`
+- **macOS:** `src-tauri/target/release/bundle/macos/Deck-8 Hub.app`
 
 ## Project Structure
 
@@ -73,6 +82,7 @@ deck8-hub/
 - **VID/PID:** `0xCBBC` / `0xC101`
 - **Protocol:** QMK VIA raw HID (custom channel `0x07`)
 - **Layout:** 4x2 grid, bottom row LEDs are snake-wired (reversed: key 4-7 maps to LED 7-4)
+- **Firmware:** [QMK Firmware](https://github.com/qmk/qmk_firmware)
 
 ## License
 

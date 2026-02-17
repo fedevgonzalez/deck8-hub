@@ -6,7 +6,7 @@ Desktop configurator for the **Churrosoft Deck-8**, an 8-key macro pad with per-
 
 ## Tech Stack
 
-- **Backend:** Rust, Tauri v2, hidapi (Windows native), enigo (keystroke simulation)
+- **Backend:** Rust, Tauri v2, hidapi (cross-platform), enigo (keystroke simulation)
 - **Frontend:** React 19, Vite 7, Tailwind CSS 4, shadcn/ui, Geist Mono font
 - **Protocol:** QMK VIA raw HID (custom channel `0x07`/`0x00`)
 - **Hardware:** VID `0xCBBC` / PID `0xC101`
@@ -48,6 +48,6 @@ cargo tauri build             # production build (frontend + Rust)
 - Language: Spanish for user-facing communication, English for code/comments
 - Dark theme: `#09090b` bg, `#111113` surfaces, emerald green accents
 - Font: Geist Mono (pixel aesthetic via `font-pixel` class)
-- State persistence: `%APPDATA%/deck8-hub/state.json`
+- State persistence: `%APPDATA%/deck8-hub/state.json` (Windows), `~/Library/Application Support/deck8-hub/state.json` (macOS)
 - No profiles system (removed intentionally)
-- Windows-only (hidapi windows-native feature + enigo SendInput)
+- Cross-platform: Windows + macOS. New features must work on both platforms.
