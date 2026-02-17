@@ -16,7 +16,6 @@ export const KeyCell = memo(function KeyCell({
   config,
   isSelected,
   onClick,
-  onToggleSlot,
   mode = "color",
   keycodeLabel,
 }: KeyCellProps) {
