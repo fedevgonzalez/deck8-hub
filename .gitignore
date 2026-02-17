@@ -15,6 +15,10 @@ frontend/dist/
 # Claude Code (local config, per-developer)
 .claude/
 
+# Auto-generated mobile icons (cargo tauri icon)
+src-tauri/icons/android/
+src-tauri/icons/ios/
+
 # OS
 Thumbs.db
 .DS_Store
