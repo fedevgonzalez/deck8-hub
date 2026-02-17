@@ -1,7 +1,4 @@
 import { useState, useEffect, useCallback } from "react";
-import packageJson from "../../package.json";
-
-const APP_VERSION = packageJson.version;
 import { cn } from "@/lib/utils";
 import { Slider } from "@/components/ui/slider";
 import { Power, Monitor, Info, Sparkles, Sun, Gauge, Palette, Save, RotateCcw, Keyboard, Cpu, Eraser, AlertTriangle } from "lucide-react";
@@ -461,7 +458,7 @@ export function SettingsView({
         <div className="flex items-center gap-2 px-5 py-2.5">
           <Info className="w-3 h-3 text-white/15" />
           <span className="font-pixel text-[8px] text-white/20 uppercase tracking-wider">
-            Deck-8 Hub v{APP_VERSION} — churrosoft
+            churrosoft
           </span>
         </div>
       </div>

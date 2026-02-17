@@ -10,6 +10,7 @@ import {
   Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import packageJson from "../../package.json";
 
 interface ToolbarProps {
   connected: boolean;
@@ -66,6 +67,11 @@ export function Toolbar({
 
       {/* Spacer */}
       <div className="flex-1" />
+
+      {/* Version */}
+      <span className="font-pixel text-[8px] text-white/15 uppercase tracking-wider mr-1">
+        v{packageJson.version}
+      </span>
 
       {/* Connection status */}
       <Tooltip>
