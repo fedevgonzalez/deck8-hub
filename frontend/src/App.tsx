@@ -66,7 +66,6 @@ export default function App() {
               onToggleOverride={toggleKeyOverride}
               onToggleKeySlot={toggleKeySlot}
               onSaveCustom={saveCustom}
-              connected={state.connected}
             />
           </TabsContent>
 

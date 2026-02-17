@@ -1,8 +1,7 @@
 import { memo } from "react";
-import { hsvToRgb, hsvToHex } from "@/lib/hsv";
+import { hsvToRgb } from "@/lib/hsv";
 import type { KeyConfig } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
-import { Cpu } from "lucide-react";
 
 interface KeyCellProps {
   config: KeyConfig;
@@ -24,9 +23,6 @@ export const KeyCell = memo(function KeyCell({
   const keySlot = config.active_slot ?? "A";
   const activeColor = keySlot === "A" ? config.slot_a : config.slot_b;
   const bgColor = hsvToRgb(activeColor.h, activeColor.s, activeColor.v);
-  const colorA = hsvToRgb(config.slot_a.h, config.slot_a.s, config.slot_a.v);
-  const colorB = hsvToRgb(config.slot_b.h, config.slot_b.s, config.slot_b.v);
-  const hexColor = hsvToHex(activeColor.h, activeColor.s, activeColor.v);
 
   const isColorMode = mode === "color";
   const overrideOn = config.override_enabled;
@@ -63,95 +59,22 @@ export const KeyCell = memo(function KeyCell({
     <button
       type="button"
       className={cn(
-        "key-cell-color relative flex flex-col items-center justify-center rounded-xl cursor-pointer",
-        "w-20 transition-all duration-100",
+        "key-cell-color relative rounded-xl cursor-pointer",
+        "w-20 h-20 transition-all duration-100",
         "border",
         isSelected
           ? "border-white/60 key-selected"
           : overrideOn
-            ? "border-white/15 hover:border-white/30"
-            : "border-white/[0.08] hover:border-white/15",
+            ? "border-white/15 hover:border-white/30 hover:scale-[1.03]"
+            : "border-white/[0.08] hover:border-white/15 hover:scale-[1.03]",
       )}
       style={{
-        height: "80px",
         backgroundColor: overrideOn ? bgColor : "#111113",
         ...(overrideOn && !isSelected
-          ? { boxShadow: `0 0 0 1px rgba(16,185,129,0.15), inset 0 1px 0 rgba(255,255,255,0.12), inset 0 -2px 4px rgba(0,0,0,0.3), 0 4px 16px -6px ${bgColor}` }
+          ? { boxShadow: `0 4px 16px -6px ${bgColor}` }
           : {}),
       }}
       onClick={onClick}
-    >
-      {overrideOn ? (
-        /* ── Override ON: CUSTOM state ── */
-        <>
-          {/* CUSTOM badge — top right */}
-          <span className="custom-badge absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-md bg-emerald-500/20 border border-emerald-400/30 font-pixel text-[7px] text-emerald-300 uppercase leading-none">
-            custom
-          </span>
-
-          {/* Dual color swatches — clickable to toggle A/B */}
-          <div className="flex items-center gap-1 mt-1">
-            {(["A", "B"] as const).map((s) => {
-              const isActive = keySlot === s;
-              const swatchColor = s === "A" ? colorA : colorB;
-              return (
-                <button
-                  key={s}
-                  type="button"
-                  className={cn(
-                    "flex flex-col items-center gap-0.5 px-1.5 py-1 rounded-md transition-all",
-                    isActive
-                      ? "opacity-100 bg-white/10"
-                      : "opacity-40 hover:opacity-70 hover:bg-white/[0.04]",
-                  )}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (!isActive && onToggleSlot) onToggleSlot();
-                  }}
-                  title={`Switch to slot ${s}`}
-                >
-                  <span
-                    className={cn(
-                      "w-3.5 h-3.5 rounded-[3px] border transition-all",
-                      isActive
-                        ? "border-white/70 shadow-[0_0_6px_rgba(255,255,255,0.15)]"
-                        : "border-white/25",
-                    )}
-                    style={{ backgroundColor: swatchColor }}
-                  />
-                  <span className={cn(
-                    "font-pixel text-[7px] drop-shadow-[0_1px_2px_rgba(0,0,0,1)] leading-none",
-                    isActive ? "text-white/60" : "text-white/30",
-                  )}>
-                    {s}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Hex color value */}
-          <span className="font-pixel text-[8px] text-white/50 tabular-nums leading-none mt-1.5">
-            {hexColor}
-          </span>
-        </>
-      ) : (
-        /* ── Override OFF: DEVICE state ── */
-        <>
-          {/* DEVICE badge — centered pill */}
-          <div className="flex items-center gap-1">
-            <Cpu className="w-2.5 h-2.5 text-white/20" />
-            <span className="font-pixel text-[8px] text-white/20 uppercase leading-none">
-              device
-            </span>
-          </div>
-
-          {/* Sub-label */}
-          <span className="font-pixel text-[7px] text-white/12 uppercase leading-none mt-1">
-            rgb matrix
-          </span>
-        </>
-      )}
-    </button>
+    />
   );
 });

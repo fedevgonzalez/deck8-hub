@@ -48,11 +48,13 @@ export function ColorEditorDialog({
   useEffect(() => {
     if (open && !prevOpen.current) {
       setSlot(config.active_slot ?? "A");
-      setToggleMode(false);
+      // Auto-enable toggle mode if A and B have different colors
+      const { slot_a: a, slot_b: b } = config;
+      setToggleMode(a.h !== b.h || a.s !== b.s || a.v !== b.v);
       didAutoEnable.current = false;
     }
     prevOpen.current = open;
-  }, [open, config.active_slot]);
+  }, [open, config.active_slot, config.slot_a, config.slot_b]);
 
   const color = slot === "A" ? config.slot_a : config.slot_b;
   const previewColor = hsvToRgb(color.h, color.s, color.v);
