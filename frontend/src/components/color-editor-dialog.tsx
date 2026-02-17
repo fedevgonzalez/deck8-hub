@@ -9,8 +9,8 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { ColorPicker } from "@/components/color-picker";
-import { hsvToRgb, hsvToHex } from "@/lib/hsv";
-import { X, Cpu, ToggleRight } from "lucide-react";
+import { hsvToRgb, hsvToHex, hexToHsv } from "@/lib/hsv";
+import { X, Cpu, ToggleRight, Copy, Check, Power } from "lucide-react";
 import type { ActiveSlot, KeyConfig } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 
@@ -105,6 +105,39 @@ export function ColorEditorDialog({
     }
   };
 
+  // Editable hex input state
+  const [hexInput, setHexInput] = useState(hexColor);
+  const [hexError, setHexError] = useState(false);
+
+  // Sync hex input when color changes externally (picker drag, slot switch)
+  useEffect(() => {
+    setHexInput(hexColor);
+    setHexError(false);
+  }, [hexColor]);
+
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyHex = () => {
+    navigator.clipboard.writeText(hexColor);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  const handleTurnOff = () => {
+    handleColorChange(0, 0, 0);
+  };
+
+  const handleHexCommit = (value: string) => {
+    const cleaned = value.startsWith("#") ? value : `#${value}`;
+    const result = hexToHsv(cleaned);
+    if (result) {
+      setHexError(false);
+      handleColorChange(result.h, result.s, result.v);
+    } else {
+      setHexError(true);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={(v) => !v && handleClose()}>
       <DialogContent className="max-w-sm bg-[#111113] border-white/12 animate-scale-in">
@@ -117,7 +150,7 @@ export function ColorEditorDialog({
             Key {keyIndex + 1}
           </DialogTitle>
           <DialogDescription className="text-xs text-white/40">
-            Pick a color or use the device animation.
+            Pick a color to override device animation. Toggle mode lets you set independent A/B colors that swap on keypress.
           </DialogDescription>
         </DialogHeader>
 
@@ -141,10 +174,39 @@ export function ColorEditorDialog({
             )}
           </div>
           <div className="flex-1">
-            <div className="text-[10px] text-white/50 tabular-nums font-medium">
-              {hexColor}
+            <div className="flex items-center gap-1">
+              <input
+                type="text"
+                value={hexInput}
+                onChange={(e) => {
+                  setHexInput(e.target.value);
+                  setHexError(false);
+                }}
+                onBlur={(e) => handleHexCommit(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleHexCommit((e.target as HTMLInputElement).value);
+                }}
+                className={cn(
+                  "w-[5.5rem] bg-transparent text-[10px] tabular-nums font-medium outline-none border-b transition-colors",
+                  hexError
+                    ? "text-red-400/70 border-red-400/30"
+                    : "text-white/50 border-transparent focus:border-white/20",
+                )}
+                spellCheck={false}
+              />
+              <button
+                type="button"
+                className="p-0.5 rounded hover:bg-white/[0.06] transition-colors"
+                onClick={handleCopyHex}
+                title="Copy hex"
+              >
+                {copied
+                  ? <Check className="w-3 h-3 text-emerald-400/70" />
+                  : <Copy className="w-3 h-3 text-white/20 hover:text-white/40" />
+                }
+              </button>
             </div>
-            <div className="text-[10px] text-white/30 tabular-nums">
+            <div className="text-[10px] text-white/30 tabular-nums mt-0.5">
               H{color.h} S{color.s} V{color.v}
             </div>
           </div>
@@ -188,9 +250,13 @@ export function ColorEditorDialog({
               Toggle mode
             </span>
           </div>
-          {toggleMode && (
+          {toggleMode ? (
             <span className="ml-auto text-[9px] text-violet-300/40">
               A/B independent
+            </span>
+          ) : (
+            <span className="ml-auto text-[9px] text-white/15">
+              Same color for both
             </span>
           )}
         </button>
@@ -265,19 +331,28 @@ export function ColorEditorDialog({
         <div className="border-t border-white/[0.06] -mx-6 mt-1" />
 
         <DialogFooter className="-mb-1 flex justify-between">
-          {config.override_enabled ? (
+          <div className="flex gap-1">
             <Button
               variant="ghost"
               size="sm"
-              className="text-[11px] text-white/25 hover:text-red-400/70 hover:bg-red-500/[0.06] h-7 px-3 gap-1.5 transition-smooth font-medium rounded-md"
-              onClick={handleResetToDevice}
+              className="text-[11px] text-white/25 hover:text-amber-400/70 hover:bg-amber-500/[0.06] h-7 px-3 gap-1.5 transition-smooth font-medium rounded-md"
+              onClick={handleTurnOff}
             >
-              <Cpu className="w-3 h-3" />
-              Reset to device
+              <Power className="w-3 h-3" />
+              Off
             </Button>
-          ) : (
-            <span />
-          )}
+            {config.override_enabled && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-[11px] text-white/25 hover:text-white/50 hover:bg-white/[0.04] h-7 px-3 gap-1.5 transition-smooth font-medium rounded-md"
+                onClick={handleResetToDevice}
+              >
+                <Cpu className="w-3 h-3" />
+                Device
+              </Button>
+            )}
+          </div>
           <Button
             variant="ghost"
             size="sm"

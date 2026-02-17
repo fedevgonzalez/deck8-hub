@@ -44,6 +44,38 @@ export function hsvToHex(h: number, s: number, v: number): string {
 }
 
 /**
+ * Convert hex color string (e.g. "#FF00AA") to QMK-style HSV (0-255 each).
+ * Returns null if the hex string is invalid.
+ */
+export function hexToHsv(hex: string): { h: number; s: number; v: number } | null {
+  const m = hex.replace("#", "").match(/^([0-9a-f]{6})$/i);
+  if (!m) return null;
+  const r = parseInt(m[1].slice(0, 2), 16) / 255;
+  const g = parseInt(m[1].slice(2, 4), 16) / 255;
+  const b = parseInt(m[1].slice(4, 6), 16) / 255;
+
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const d = max - min;
+
+  let hDeg = 0;
+  if (d !== 0) {
+    if (max === r) hDeg = 60 * (((g - b) / d) % 6);
+    else if (max === g) hDeg = 60 * ((b - r) / d + 2);
+    else hDeg = 60 * ((r - g) / d + 4);
+  }
+  if (hDeg < 0) hDeg += 360;
+
+  const sNorm = max === 0 ? 0 : d / max;
+
+  return {
+    h: Math.round((hDeg / 360) * 255),
+    s: Math.round(sNorm * 255),
+    v: Math.round(max * 255),
+  };
+}
+
+/**
  * Build a CSS linear-gradient for the saturation slider given a hue (0-255).
  */
 export function satGradient(h: number): string {

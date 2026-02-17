@@ -1,6 +1,6 @@
 [package]
 name = "deck8-hub"
-version = "1.0.1"
+version = "1.0.2"
 edition = "2021"
 
 [lib]
@@ -21,6 +21,13 @@ log = "0.4"
 env_logger = "0.11"
 enigo = "0.2"
 dirs = "6"
+tauri-plugin-window-state = "2.4.1"
 
 [target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
 tauri-plugin-autostart = "2.5.1"
+
+[profile.release]
+lto = true
+strip = true
+opt-level = 3
+codegen-units = 1

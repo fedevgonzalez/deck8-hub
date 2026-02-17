@@ -1,7 +1,21 @@
 import { useState, useEffect, useCallback } from "react";
+import packageJson from "../../package.json";
+
+const APP_VERSION = packageJson.version;
 import { cn } from "@/lib/utils";
 import { Slider } from "@/components/ui/slider";
-import { Power, Monitor, Info, Sparkles, Sun, Gauge, Palette, Save } from "lucide-react";
+import { Power, Monitor, Info, Sparkles, Sun, Gauge, Palette, Save, RotateCcw, Keyboard, Cpu, Eraser, AlertTriangle } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { RGB_EFFECTS } from "@/lib/rgb-effects";
 import { hsvToRgb } from "@/lib/hsv";
@@ -13,6 +27,11 @@ interface SettingsViewProps {
   onRgbChange: (field: keyof RgbMatrixState, value: number) => void;
   onRgbColorChange: (h: number, s: number) => void;
   onRgbSave: () => void;
+  onRestoreDefaults: () => void;
+  onBootloaderJump: () => void;
+  onEepromReset: () => void;
+  onDynamicKeymapReset: () => void;
+  onMacroReset: () => void;
 }
 
 // Tauri autostart bindings — gracefully fail in browser
@@ -28,6 +47,11 @@ export function SettingsView({
   onRgbChange,
   onRgbColorChange,
   onRgbSave,
+  onRestoreDefaults,
+  onBootloaderJump,
+  onEepromReset,
+  onDynamicKeymapReset,
+  onMacroReset,
 }: SettingsViewProps) {
   const [autostart, setAutostart] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -124,7 +148,7 @@ export function SettingsView({
                         : "bg-transparent text-white/30 border border-transparent hover:bg-white/[0.04] hover:text-white/50",
                     )}
                     onClick={() => onRgbChange("effect", effect.id)}
-                    title={effect.name}
+                    title={effect.desc}
                   >
                     {effect.name}
                   </button>
@@ -137,7 +161,7 @@ export function SettingsView({
               <div className="flex items-center gap-1.5">
                 <Sun className="w-3 h-3 text-white/20" />
                 <span className="font-pixel text-[9px] text-white/40 uppercase tracking-wider">Brightness</span>
-                <span className="font-pixel text-[9px] text-white/50 tabular-nums ml-auto">{rgbMatrix.brightness}</span>
+                <span className="font-pixel text-[9px] text-white/50 tabular-nums ml-auto">{Math.round(rgbMatrix.brightness / 255 * 100)}%</span>
               </div>
               <Slider
                 min={0}
@@ -153,7 +177,7 @@ export function SettingsView({
               <div className="flex items-center gap-1.5">
                 <Gauge className="w-3 h-3 text-white/20" />
                 <span className="font-pixel text-[9px] text-white/40 uppercase tracking-wider">Speed</span>
-                <span className="font-pixel text-[9px] text-white/50 tabular-nums ml-auto">{rgbMatrix.speed}</span>
+                <span className="font-pixel text-[9px] text-white/50 tabular-nums ml-auto">{Math.round(rgbMatrix.speed / 255 * 100)}%</span>
               </div>
               <Slider
                 min={0}
@@ -267,11 +291,177 @@ export function SettingsView({
           </div>
         </div>
 
+        {/* ── Device Actions ────────────────────────────── */}
+        {connected && (
+          <div className="px-5 py-3 flex flex-col gap-2">
+            <div className="flex items-center gap-2 mb-1">
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-400/50" />
+              <span className="font-pixel text-[11px] text-white/70 font-bold uppercase tracking-wider">
+                Device
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-1.5">
+              {/* Restore defaults */}
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <button type="button" className={cn(
+                    "flex items-center gap-2 px-3 py-2.5 rounded-lg border transition-all",
+                    "border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.05] hover:border-white/10",
+                  )}>
+                    <RotateCcw className="w-3 h-3 text-white/25" />
+                    <div className="text-left">
+                      <div className="font-pixel text-[9px] text-white/60">Restore Colors</div>
+                      <div className="font-pixel text-[7px] text-white/20">Reset all key colors</div>
+                    </div>
+                  </button>
+                </AlertDialogTrigger>
+                <AlertDialogContent className="bg-[#111113] border-white/12">
+                  <AlertDialogHeader>
+                    <AlertDialogTitle className="text-sm">Restore default colors?</AlertDialogTitle>
+                    <AlertDialogDescription className="text-xs text-white/40">
+                      This will reset all 8 key colors to factory defaults. Your current custom colors will be lost.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel className="text-xs h-8">Cancel</AlertDialogCancel>
+                    <AlertDialogAction className="text-xs h-8 bg-red-500/20 text-red-300 hover:bg-red-500/30 border border-red-500/20" onClick={onRestoreDefaults}>
+                      Reset Colors
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+
+              {/* Reset keymaps */}
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <button type="button" className={cn(
+                    "flex items-center gap-2 px-3 py-2.5 rounded-lg border transition-all",
+                    "border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.05] hover:border-white/10",
+                  )}>
+                    <Keyboard className="w-3 h-3 text-white/25" />
+                    <div className="text-left">
+                      <div className="font-pixel text-[9px] text-white/60">Reset Keymaps</div>
+                      <div className="font-pixel text-[7px] text-white/20">Default key bindings</div>
+                    </div>
+                  </button>
+                </AlertDialogTrigger>
+                <AlertDialogContent className="bg-[#111113] border-white/12">
+                  <AlertDialogHeader>
+                    <AlertDialogTitle className="text-sm">Reset all keymaps?</AlertDialogTitle>
+                    <AlertDialogDescription className="text-xs text-white/40">
+                      This will reset all 8 key assignments to QMK factory defaults stored in firmware.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel className="text-xs h-8">Cancel</AlertDialogCancel>
+                    <AlertDialogAction className="text-xs h-8 bg-red-500/20 text-red-300 hover:bg-red-500/30 border border-red-500/20" onClick={onDynamicKeymapReset}>
+                      Reset Keymaps
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+
+              {/* Reset macros */}
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <button type="button" className={cn(
+                    "flex items-center gap-2 px-3 py-2.5 rounded-lg border transition-all",
+                    "border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.05] hover:border-white/10",
+                  )}>
+                    <Eraser className="w-3 h-3 text-white/25" />
+                    <div className="text-left">
+                      <div className="font-pixel text-[9px] text-white/60">Reset Macros</div>
+                      <div className="font-pixel text-[7px] text-white/20">Clear macro buffer</div>
+                    </div>
+                  </button>
+                </AlertDialogTrigger>
+                <AlertDialogContent className="bg-[#111113] border-white/12">
+                  <AlertDialogHeader>
+                    <AlertDialogTitle className="text-sm">Reset all macros?</AlertDialogTitle>
+                    <AlertDialogDescription className="text-xs text-white/40">
+                      This will clear all stored macros from device EEPROM.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel className="text-xs h-8">Cancel</AlertDialogCancel>
+                    <AlertDialogAction className="text-xs h-8 bg-red-500/20 text-red-300 hover:bg-red-500/30 border border-red-500/20" onClick={onMacroReset}>
+                      Reset Macros
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+
+              {/* EEPROM reset */}
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <button type="button" className={cn(
+                    "flex items-center gap-2 px-3 py-2.5 rounded-lg border transition-all",
+                    "border-red-500/10 bg-red-500/[0.02] hover:bg-red-500/[0.06] hover:border-red-500/20",
+                  )}>
+                    <Cpu className="w-3 h-3 text-red-400/30" />
+                    <div className="text-left">
+                      <div className="font-pixel text-[9px] text-red-300/50">EEPROM Reset</div>
+                      <div className="font-pixel text-[7px] text-red-300/20">Full factory reset</div>
+                    </div>
+                  </button>
+                </AlertDialogTrigger>
+                <AlertDialogContent className="bg-[#111113] border-white/12">
+                  <AlertDialogHeader>
+                    <AlertDialogTitle className="text-sm text-red-300">Full EEPROM reset?</AlertDialogTitle>
+                    <AlertDialogDescription className="text-xs text-white/40">
+                      This erases ALL device EEPROM data including keymaps, macros, RGB settings, and calibration. The device will need to be reconnected after reset.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel className="text-xs h-8">Cancel</AlertDialogCancel>
+                    <AlertDialogAction className="text-xs h-8 bg-red-500/30 text-red-200 hover:bg-red-500/40 border border-red-500/30" onClick={onEepromReset}>
+                      Erase EEPROM
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+
+            {/* Bootloader — separate, most dangerous */}
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <button type="button" className={cn(
+                  "flex items-center gap-2.5 px-3 py-2 rounded-lg border transition-all mt-1",
+                  "border-red-500/10 bg-red-500/[0.02] hover:bg-red-500/[0.06] hover:border-red-500/20",
+                )}>
+                  <Cpu className="w-3 h-3 text-red-400/30" />
+                  <div className="text-left flex-1">
+                    <div className="font-pixel text-[9px] text-red-300/50">Enter Bootloader</div>
+                    <div className="font-pixel text-[7px] text-red-300/20">For firmware flashing — device will disconnect</div>
+                  </div>
+                </button>
+              </AlertDialogTrigger>
+              <AlertDialogContent className="bg-[#111113] border-white/12">
+                <AlertDialogHeader>
+                  <AlertDialogTitle className="text-sm text-red-300">Enter bootloader mode?</AlertDialogTitle>
+                  <AlertDialogDescription className="text-xs text-white/40">
+                    The device will disconnect and enter DFU/bootloader mode for firmware flashing. You'll need to reflash firmware or physically reset the device to return to normal operation.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel className="text-xs h-8">Cancel</AlertDialogCancel>
+                  <AlertDialogAction className="text-xs h-8 bg-red-500/30 text-red-200 hover:bg-red-500/40 border border-red-500/30" onClick={onBootloaderJump}>
+                    Enter Bootloader
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+
+            <div className="border-b border-white/[0.06]" />
+          </div>
+        )}
+
         {/* ── Footer ────────────────────────────────────── */}
         <div className="flex items-center gap-2 px-5 py-2.5">
           <Info className="w-3 h-3 text-white/15" />
           <span className="font-pixel text-[8px] text-white/20 uppercase tracking-wider">
-            Deck-8 Hub v0.1.0 — churrosoft
+            Deck-8 Hub v{APP_VERSION} — churrosoft
           </span>
         </div>
       </div>

@@ -682,6 +682,7 @@ fn do_toggle(app: &AppHandle) -> Result<String, String> {
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_window_state::Builder::new().build())
         .manage(std::sync::Mutex::new({
             let mut state = AppState::default();
             // Restore key colors from last session

@@ -44,6 +44,12 @@ export function ColorView({
             />
           </div>
         </div>
+        {/* Hint */}
+        <div className="relative z-[1] px-5 pb-3 text-center">
+          <span className="font-pixel text-[8px] text-white/15 uppercase tracking-wider">
+            click a key to edit its color
+          </span>
+        </div>
       </div>
 
       {/* Color editor dialog */}

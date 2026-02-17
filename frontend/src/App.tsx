@@ -9,9 +9,12 @@ import { useDeck8 } from "@/hooks/use-deck8";
 import { Unplug, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+import { useState } from "react";
+
 const isTauri = "__TAURI_INTERNALS__" in window;
 
 export default function App() {
+  const [overlayDismissed, setOverlayDismissed] = useState(false);
   const {
     state,
     selectedKey,
@@ -22,6 +25,11 @@ export default function App() {
     toggleKeyOverride,
     toggleKeySlot,
     saveCustom,
+    restoreDefaults,
+    bootloaderJump,
+    eepromReset,
+    dynamicKeymapReset,
+    macroReset,
     updateRgb,
     updateRgbColor,
     saveRgb,
@@ -76,12 +84,17 @@ export default function App() {
               onRgbChange={updateRgb}
               onRgbColorChange={updateRgbColor}
               onRgbSave={saveRgb}
+              onRestoreDefaults={restoreDefaults}
+              onBootloaderJump={bootloaderJump}
+              onEepromReset={eepromReset}
+              onDynamicKeymapReset={dynamicKeymapReset}
+              onMacroReset={macroReset}
             />
           </TabsContent>
         </Tabs>
 
         {/* Connection overlay — only in Tauri, not in browser dev mode */}
-        {isTauri && !state.connected && (
+        {isTauri && !state.connected && !overlayDismissed && (
           <div className="connection-overlay fixed inset-0 z-50 flex items-center justify-center bg-[#09090b]/80 backdrop-blur-sm animate-fade-in">
             <div className="flex flex-col items-center gap-5 p-8 max-w-xs text-center">
               {/* Pulsing icon */}
@@ -118,10 +131,7 @@ export default function App() {
               <button
                 type="button"
                 className="font-pixel text-[8px] text-white/15 hover:text-white/30 uppercase tracking-wider transition-colors"
-                onClick={() => {
-                  // Hide overlay by dispatching a custom event
-                  document.querySelector('.connection-overlay')?.classList.add('hidden');
-                }}
+                onClick={() => setOverlayDismissed(true)}
               >
                 continue without device
               </button>
