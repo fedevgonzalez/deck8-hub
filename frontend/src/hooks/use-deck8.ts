@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import type { ActiveSlot, RgbMatrixState, StateSnapshot } from "@/lib/tauri";
+import type { ActiveSlot, AudioDeviceList, RgbMatrixState, SoundEntry, StateSnapshot } from "@/lib/tauri";
 import {
   connectDevice,
   getState,
@@ -22,6 +22,19 @@ import {
   setRgbSpeed,
   setRgbColor,
   saveRgbMatrix,
+  listAudioDevices,
+  setAudioInputDevice,
+  setAudioOutputDevice,
+  setSoundVolume,
+  setMicVolume,
+  addToSoundLibrary,
+  addToSoundLibraryTrimmed,
+  removeFromSoundLibrary,
+  renameSound as ipcRenameSound,
+  setKeySound,
+  previewLibrarySound as ipcPreviewLibrarySound,
+  getAudioDuration,
+  previewTrim,
 } from "@/lib/tauri";
 
 const DEFAULT_STATE: StateSnapshot = {
@@ -36,13 +49,30 @@ const DEFAULT_STATE: StateSnapshot = {
   keymaps: [0, 0, 0, 0, 0, 0, 0, 0],
   device_info: null,
   rgb_matrix: null,
+  audio_config: {
+    sound_files: [null, null, null, null, null, null, null, null],
+    sound_library: [],
+    key_sounds: [null, null, null, null, null, null, null, null],
+    audio_input_device: null,
+    audio_output_device: null,
+    sound_volume: 1.0,
+    mic_volume: 1.0,
+    soundboard_enabled: false,
+  },
+};
+
+const DEFAULT_DEVICES: AudioDeviceList = {
+  input_devices: [],
+  output_devices: [],
 };
 
 export function useDeck8() {
   const [state, setState] = useState<StateSnapshot>(DEFAULT_STATE);
   const [selectedKey, setSelectedKey] = useState<number | null>(null);
+  const [audioDevices, setAudioDevices] = useState<AudioDeviceList>(DEFAULT_DEVICES);
   const colorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rgbTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const volumeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Refresh helpers ─────────────────────────────────────
 
@@ -293,11 +323,191 @@ export function useDeck8() {
     }
   }, []);
 
+  // ── Soundboard actions ──────────────────────────────────
+
+  const refreshAudioDevices = useCallback(async () => {
+    try {
+      const devices = await listAudioDevices();
+      setAudioDevices(devices);
+    } catch { /* silent */ }
+  }, []);
+
+  const selectAudioInput = useCallback(async (name: string) => {
+    setState((prev) => ({
+      ...prev,
+      audio_config: { ...prev.audio_config, audio_input_device: name },
+    }));
+    try {
+      await setAudioInputDevice(name);
+    } catch (e) {
+      toast.error(`Set input device failed: ${e}`);
+    }
+  }, []);
+
+  const selectAudioOutput = useCallback(async (name: string) => {
+    setState((prev) => ({
+      ...prev,
+      audio_config: { ...prev.audio_config, audio_output_device: name },
+    }));
+    try {
+      await setAudioOutputDevice(name);
+    } catch (e) {
+      toast.error(`Set output device failed: ${e}`);
+    }
+  }, []);
+
+  const addToLibrary = useCallback(async (filePath: string, displayName: string): Promise<SoundEntry | null> => {
+    try {
+      const entry = await addToSoundLibrary(filePath, displayName);
+      setState((prev) => ({
+        ...prev,
+        audio_config: {
+          ...prev.audio_config,
+          sound_library: [...prev.audio_config.sound_library, entry],
+        },
+      }));
+      toast.success(`"${displayName}" added to library`);
+      return entry;
+    } catch (e) {
+      toast.error(`Add to library failed: ${e}`);
+      return null;
+    }
+  }, []);
+
+  const addToLibraryTrimmed = useCallback(async (
+    filePath: string,
+    displayName: string,
+    startMs: number,
+    endMs: number,
+  ): Promise<SoundEntry | null> => {
+    try {
+      const entry = await addToSoundLibraryTrimmed(filePath, displayName, startMs, endMs);
+      setState((prev) => ({
+        ...prev,
+        audio_config: {
+          ...prev.audio_config,
+          sound_library: [...prev.audio_config.sound_library, entry],
+        },
+      }));
+      toast.success(`"${displayName}" added to library (trimmed)`);
+      return entry;
+    } catch (e) {
+      toast.error(`Add trimmed to library failed: ${e}`);
+      return null;
+    }
+  }, []);
+
+  const doRemoveFromLibrary = useCallback(async (soundId: string) => {
+    try {
+      await removeFromSoundLibrary(soundId);
+      setState((prev) => ({
+        ...prev,
+        audio_config: {
+          ...prev.audio_config,
+          sound_library: prev.audio_config.sound_library.filter((e) => e.id !== soundId),
+          key_sounds: prev.audio_config.key_sounds.map((ks) =>
+            ks === soundId ? null : ks,
+          ) as (string | null)[],
+        },
+      }));
+    } catch (e) {
+      toast.error(`Remove from library failed: ${e}`);
+    }
+  }, []);
+
+  const doRenameSound = useCallback(async (soundId: string, newName: string) => {
+    try {
+      await ipcRenameSound(soundId, newName);
+      setState((prev) => ({
+        ...prev,
+        audio_config: {
+          ...prev.audio_config,
+          sound_library: prev.audio_config.sound_library.map((e) =>
+            e.id === soundId ? { ...e, display_name: newName } : e,
+          ),
+        },
+      }));
+    } catch (e) {
+      toast.error(`Rename failed: ${e}`);
+    }
+  }, []);
+
+  const doSetKeySound = useCallback(async (keyIndex: number, soundId: string | null) => {
+    try {
+      await setKeySound(keyIndex, soundId);
+      setState((prev) => {
+        const keySounds = [...prev.audio_config.key_sounds];
+        keySounds[keyIndex] = soundId;
+        return {
+          ...prev,
+          audio_config: { ...prev.audio_config, key_sounds: keySounds },
+        };
+      });
+    } catch (e) {
+      toast.error(`Set key sound failed: ${e}`);
+    }
+  }, []);
+
+  const doPreviewLibrarySound = useCallback(async (soundId: string) => {
+    try {
+      await ipcPreviewLibrarySound(soundId);
+    } catch (e) {
+      toast.error(`Preview failed: ${e}`);
+    }
+  }, []);
+
+  const updateSoundVolume = useCallback((volume: number) => {
+    setState((prev) => ({
+      ...prev,
+      audio_config: { ...prev.audio_config, sound_volume: volume },
+    }));
+    if (volumeTimer.current) clearTimeout(volumeTimer.current);
+    volumeTimer.current = setTimeout(async () => {
+      try {
+        await setSoundVolume(volume);
+      } catch { /* silent */ }
+    }, 50);
+  }, []);
+
+  const updateMicVolume = useCallback((volume: number) => {
+    setState((prev) => ({
+      ...prev,
+      audio_config: { ...prev.audio_config, mic_volume: volume },
+    }));
+    if (volumeTimer.current) clearTimeout(volumeTimer.current);
+    volumeTimer.current = setTimeout(async () => {
+      try {
+        await setMicVolume(volume);
+      } catch { /* silent */ }
+    }, 50);
+  }, []);
+
+  // ── Audio trim actions ─────────────────────────────────────
+
+  const getFileDuration = useCallback(async (filePath: string): Promise<number> => {
+    try {
+      return await getAudioDuration(filePath);
+    } catch (e) {
+      toast.error(`Get duration failed: ${e}`);
+      return 0;
+    }
+  }, []);
+
+  const previewTrimmedAudio = useCallback(async (sourcePath: string, startMs: number, endMs: number) => {
+    try {
+      await previewTrim(sourcePath, startMs, endMs);
+    } catch (e) {
+      toast.error(`Preview failed: ${e}`);
+    }
+  }, []);
+
   // ── Initialization + event listener ─────────────────────
 
   useEffect(() => {
     // Silent auto-connect — no toast on failure
     connect(true);
+    // Load audio devices
+    refreshAudioDevices();
 
     // Global toggle (tray menu "Toggle LEDs")
     const unlistenGlobal = onSlotToggled((newSlot) => {
@@ -344,5 +554,22 @@ export function useDeck8() {
     updateRgb,
     updateRgbColor,
     saveRgb: doSaveRgb,
+    // Soundboard
+    audioDevices,
+    refreshAudioDevices,
+    selectAudioInput,
+    selectAudioOutput,
+    updateSoundVolume,
+    updateMicVolume,
+    // Sound library
+    addToLibrary,
+    addToLibraryTrimmed,
+    removeFromLibrary: doRemoveFromLibrary,
+    renameSound: doRenameSound,
+    setKeySound: doSetKeySound,
+    previewLibrarySound: doPreviewLibrarySound,
+    // Audio trim
+    getFileDuration,
+    previewTrimmedAudio,
   };
 }

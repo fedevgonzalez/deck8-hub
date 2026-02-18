@@ -213,7 +213,7 @@ export function ColorEditorDialog({
           {!config.override_enabled && (
             <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-white/[0.04] border border-white/[0.06]">
               <Cpu className="w-2.5 h-2.5 text-white/25" />
-              <span className="font-pixel text-[8px] text-white/25 uppercase">device</span>
+              <span className="font-pixel text-[8px] text-white/25 uppercase tracking-wider">device</span>
             </div>
           )}
         </div>

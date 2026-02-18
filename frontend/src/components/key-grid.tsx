@@ -15,6 +15,7 @@ interface KeyGridProps {
   onToggleKeySlot?: (index: number) => void;
   mode?: "color" | "keycode";
   keycodeLabels?: string[];
+  soundNames?: (string | null)[];
 }
 
 export function KeyGrid({
@@ -24,6 +25,7 @@ export function KeyGrid({
   onToggleKeySlot,
   mode = "color",
   keycodeLabels,
+  soundNames,
 }: KeyGridProps) {
   return (
     <div className="grid grid-cols-4 gap-2" style={{ width: "344px" }}>
@@ -36,6 +38,7 @@ export function KeyGrid({
           onToggleSlot={onToggleKeySlot ? () => onToggleKeySlot(hwIndex) : undefined}
           mode={mode}
           keycodeLabel={keycodeLabels?.[hwIndex]}
+          soundName={soundNames?.[hwIndex]}
         />
         </div>
       ))}

@@ -1,3 +1,4 @@
+mod audio;
 mod hid;
 mod profile;
 mod protocol;
@@ -5,7 +6,10 @@ mod state;
 
 use log::{error, info, warn};
 use protocol::{DeviceInfo, RgbMatrixState};
-use state::{ActiveSlot, AppState, KeyConfig, SharedState, StateSnapshot};
+use state::{
+    ActiveSlot, AppState, AudioConfig, KeyConfig, ManagedAudioPipeline, SharedState,
+    SoundEntry, StateSnapshot,
+};
 use tauri::{
     image::Image,
     menu::{MenuBuilder, MenuItemBuilder},
@@ -63,9 +67,11 @@ fn qmk_keycode_to_display(keycode: u16) -> Option<String> {
         return None;
     }
 
+    // Order must match Tauri's global_hotkey Display format:
+    // shift (bit 0), control (bit 1), alt (bit 2), super (bit 3)
     let mut parts = Vec::new();
-    if mods & 0x11 != 0 { parts.push("control".to_string()); }
     if mods & 0x22 != 0 { parts.push("shift".to_string()); }
+    if mods & 0x11 != 0 { parts.push("control".to_string()); }
     if mods & 0x44 != 0 { parts.push("alt".to_string()); }
     if mods & 0x88 != 0 { parts.push("super".to_string()); }
 
@@ -188,6 +194,27 @@ fn register_key_shortcuts(app: &AppHandle, keymaps: &[u16; 8]) {
     info!("[shortcuts] Registered {} per-key shortcuts", st.shortcut_map.len());
 }
 
+// ── Internal keycodes for sound-only keys ───────────────────────────────
+
+/// Internal keycodes: Ctrl+Alt+Shift + {1..8} (0x071E..0x0725).
+/// Auto-assigned when a key has a sound but no user-set keycode.
+/// The shortcut handler skips keystroke replay for these.
+const INTERNAL_KEYCODE_BASE: u16 = 0x071E; // Ctrl+Alt+Shift+1
+
+fn internal_keycode_for_key(led_index: usize) -> u16 {
+    INTERNAL_KEYCODE_BASE + led_index as u16
+}
+
+fn is_internal_keycode(keycode: u16) -> bool {
+    keycode >= INTERNAL_KEYCODE_BASE && keycode < INTERNAL_KEYCODE_BASE + 8
+}
+
+/// Convert LED index to keymap/matrix index (inverse of keymap_to_led_index).
+/// The mapping is symmetric: top row direct, bottom row reversed.
+fn led_to_keymap_index(led_idx: usize) -> usize {
+    if led_idx < 4 { led_idx } else { 11 - led_idx }
+}
+
 // ── Helpers ─────────────────────────────────────────────────────────────
 
 /// Apply color for a single key to the device, using the key's own active_slot.
@@ -210,10 +237,10 @@ fn apply_key_to_device(dev: &hid::Deck8Device, key_index: u8, key: &KeyConfig) {
     }
 }
 
-/// Persist key state to disk (fire-and-forget).
-fn persist_keys(keys: &[KeyConfig; 8]) {
-    if let Err(e) = profile::save_state(keys) {
-        error!("Failed to persist key state: {e:#}");
+/// Persist key + audio state to disk (fire-and-forget).
+fn persist_state(keys: &[KeyConfig; 8], audio_config: &AudioConfig) {
+    if let Err(e) = profile::save_state(keys, audio_config) {
+        error!("Failed to persist state: {e:#}");
     }
 }
 
@@ -262,6 +289,25 @@ fn connect_device(app: AppHandle, state: State<SharedState>) -> bool {
                     error!("[connect] custom_save FAILED: {:#}", e);
                 }
             }
+            // Auto-assign internal keycodes for keys with sounds but no keycode
+            for led_idx in 0..8 {
+                if s.audio_config.key_sounds[led_idx].is_some() {
+                    let km_idx = led_to_keymap_index(led_idx);
+                    if s.keymaps[km_idx] == 0x0000 {
+                        let internal_kc = internal_keycode_for_key(led_idx);
+                        if let Some(ref dev) = s.device {
+                            let (row, col) = protocol::key_index_to_matrix(km_idx as u8);
+                            if let Err(e) = dev.set_keycode(0, row, col, internal_kc) {
+                                error!("[sound] Failed to auto-assign keycode on connect: {}", e);
+                            }
+                        }
+                        s.keymaps[km_idx] = internal_kc;
+                        info!("[sound] Auto-assigned internal keycode 0x{:04X} to LED {} on connect", internal_kc, led_idx);
+                    }
+                }
+            }
+            keymaps_copy = s.keymaps;
+
             // Release lock before registering shortcuts (which also locks state)
             drop(s);
             // Register per-key shortcuts based on actual device keymaps
@@ -311,7 +357,7 @@ fn set_key_color(
                 .map_err(|e| e.to_string())?;
         }
     }
-    persist_keys(&st.keys);
+    persist_state(&st.keys, &st.audio_config);
     Ok(())
 }
 
@@ -335,7 +381,7 @@ fn toggle_slot(state: State<SharedState>) -> Result<String, String> {
     if let Some(ref dev) = st.device {
         apply_all_to_device(dev, &st.keys);
     }
-    persist_keys(&st.keys);
+    persist_state(&st.keys, &st.audio_config);
     Ok(new_slot.to_string())
 }
 
@@ -359,7 +405,7 @@ fn toggle_key_slot(
     if let Some(ref dev) = st.device {
         apply_key_to_device(dev, key_index as u8, &st.keys[key_index]);
     }
-    persist_keys(&st.keys);
+    persist_state(&st.keys, &st.audio_config);
     Ok(st.snapshot())
 }
 
@@ -441,7 +487,7 @@ fn set_key_override(
         // Persist per-key overrides to device EEPROM
         let _ = dev.custom_save();
     }
-    persist_keys(&st.keys);
+    persist_state(&st.keys, &st.audio_config);
     Ok(st.snapshot())
 }
 
@@ -453,7 +499,7 @@ fn restore_defaults(state: State<SharedState>) -> Result<StateSnapshot, String> 
         apply_all_to_device(dev, &st.keys);
         let _ = dev.custom_save();
     }
-    persist_keys(&st.keys);
+    persist_state(&st.keys, &st.audio_config);
     Ok(st.snapshot())
 }
 
@@ -619,11 +665,296 @@ fn save_rgb_matrix(state: State<SharedState>) -> Result<(), String> {
     }
 }
 
+// ── Soundboard commands ──────────────────────────────────────────────────
+
+#[tauri::command]
+fn list_audio_devices() -> audio::AudioDeviceList {
+    audio::list_devices()
+}
+
+/// Check if a device name looks like a virtual audio cable.
+fn is_virtual_cable(name: &str) -> bool {
+    let lower = name.to_lowercase();
+    lower.contains("cable") || lower.contains("blackhole") || lower.contains("virtual")
+}
+
+/// Try to (re)start the audio pipeline if both input and output devices are configured.
+/// Only starts if the output device looks like a virtual cable (to avoid echo).
+/// Stops any existing pipeline first. Silently does nothing if devices aren't set.
+fn try_auto_start_pipeline(
+    state: &State<SharedState>,
+    pipeline_state: &State<ManagedAudioPipeline>,
+) {
+    // Stop existing pipeline
+    {
+        let mut pl = pipeline_state.0.lock().unwrap();
+        if pl.is_some() {
+            *pl = None;
+            info!("[audio] Pipeline stopped (restart)");
+        }
+    }
+
+    let st = state.lock().unwrap();
+    let input = match st.audio_config.audio_input_device.as_deref() {
+        Some(s) => s.to_string(),
+        None => return,
+    };
+    let output = match st.audio_config.audio_output_device.as_deref() {
+        Some(s) => s.to_string(),
+        None => return,
+    };
+
+    // Only start pipeline if output is a virtual cable — otherwise mic audio
+    // would loop back to the user's own speakers/headphones causing echo.
+    if !is_virtual_cable(&output) {
+        info!("[audio] Skipping pipeline auto-start: output \"{}\" is not a virtual cable", output);
+        return;
+    }
+
+    let mic_vol = st.audio_config.mic_volume;
+    let sound_vol = st.audio_config.sound_volume;
+    drop(st);
+
+    match audio::AudioPipeline::start(&input, &output, mic_vol, sound_vol) {
+        Ok(pipeline) => {
+            let mut pl = pipeline_state.0.lock().unwrap();
+            *pl = Some(pipeline);
+            let mut st = state.lock().unwrap();
+            st.audio_config.soundboard_enabled = true;
+            persist_state(&st.keys, &st.audio_config);
+        }
+        Err(e) => {
+            warn!("[audio] Auto-start pipeline failed: {}", e);
+        }
+    }
+}
+
+#[tauri::command]
+fn set_audio_input_device(
+    state: State<SharedState>,
+    pipeline_state: State<ManagedAudioPipeline>,
+    name: String,
+) -> Result<(), String> {
+    {
+        let mut st = state.lock().unwrap();
+        st.audio_config.audio_input_device = Some(name);
+        persist_state(&st.keys, &st.audio_config);
+    }
+    try_auto_start_pipeline(&state, &pipeline_state);
+    Ok(())
+}
+
+#[tauri::command]
+fn set_audio_output_device(
+    state: State<SharedState>,
+    pipeline_state: State<ManagedAudioPipeline>,
+    name: String,
+) -> Result<(), String> {
+    {
+        let mut st = state.lock().unwrap();
+        st.audio_config.audio_output_device = Some(name);
+        persist_state(&st.keys, &st.audio_config);
+    }
+    try_auto_start_pipeline(&state, &pipeline_state);
+    Ok(())
+}
+
+#[tauri::command]
+fn add_to_sound_library(
+    state: State<SharedState>,
+    file_path: String,
+    display_name: String,
+) -> Result<SoundEntry, String> {
+    let entry = audio::import_to_library(&file_path, &display_name)
+        .map_err(|e| e.to_string())?;
+    let mut st = state.lock().unwrap();
+    st.audio_config.sound_library.push(entry.clone());
+    persist_state(&st.keys, &st.audio_config);
+    Ok(entry)
+}
+
+#[tauri::command]
+fn add_to_sound_library_trimmed(
+    state: State<SharedState>,
+    file_path: String,
+    display_name: String,
+    start_ms: u64,
+    end_ms: u64,
+) -> Result<SoundEntry, String> {
+    let entry = audio::import_to_library_trimmed(&file_path, &display_name, start_ms, end_ms)
+        .map_err(|e| e.to_string())?;
+    let mut st = state.lock().unwrap();
+    st.audio_config.sound_library.push(entry.clone());
+    persist_state(&st.keys, &st.audio_config);
+    Ok(entry)
+}
+
+#[tauri::command]
+fn remove_from_sound_library(
+    state: State<SharedState>,
+    sound_id: String,
+) -> Result<(), String> {
+    let mut st = state.lock().unwrap();
+    // Find and remove the entry
+    if let Some(pos) = st.audio_config.sound_library.iter().position(|e| e.id == sound_id) {
+        let entry = st.audio_config.sound_library.remove(pos);
+        let _ = audio::delete_sound(&entry.filename);
+    }
+    // Clear any key_sounds referencing this id
+    for slot in st.audio_config.key_sounds.iter_mut() {
+        if slot.as_deref() == Some(sound_id.as_str()) {
+            *slot = None;
+        }
+    }
+    persist_state(&st.keys, &st.audio_config);
+    Ok(())
+}
+
+#[tauri::command]
+fn rename_sound(
+    state: State<SharedState>,
+    sound_id: String,
+    new_name: String,
+) -> Result<(), String> {
+    let mut st = state.lock().unwrap();
+    if let Some(entry) = st.audio_config.sound_library.iter_mut().find(|e| e.id == sound_id) {
+        entry.display_name = new_name;
+    }
+    persist_state(&st.keys, &st.audio_config);
+    Ok(())
+}
+
+#[tauri::command]
+fn set_key_sound(
+    app: AppHandle,
+    state: State<SharedState>,
+    key_index: usize,
+    sound_id: Option<String>,
+) -> Result<(), String> {
+    if key_index >= 8 {
+        return Err("key_index out of range".into());
+    }
+    let keymaps_copy;
+    {
+        let mut st = state.lock().unwrap();
+        st.audio_config.key_sounds[key_index] = sound_id.clone();
+
+        let keymap_idx = led_to_keymap_index(key_index);
+        let current_keycode = st.keymaps[keymap_idx];
+
+        if sound_id.is_some() && current_keycode == 0x0000 {
+            // Auto-assign internal keycode so the shortcut handler can detect key presses
+            let internal_kc = internal_keycode_for_key(key_index);
+            if let Some(ref dev) = st.device {
+                let (row, col) = protocol::key_index_to_matrix(keymap_idx as u8);
+                if let Err(e) = dev.set_keycode(0, row, col, internal_kc) {
+                    error!("[sound] Failed to auto-assign keycode: {}", e);
+                }
+            }
+            st.keymaps[keymap_idx] = internal_kc;
+            info!("[sound] Auto-assigned internal keycode 0x{:04X} to LED {} (keymap {})",
+                  internal_kc, key_index, keymap_idx);
+        } else if sound_id.is_none() && is_internal_keycode(current_keycode) {
+            // Clear internal keycode when sound is removed
+            if let Some(ref dev) = st.device {
+                let (row, col) = protocol::key_index_to_matrix(keymap_idx as u8);
+                if let Err(e) = dev.set_keycode(0, row, col, 0x0000) {
+                    error!("[sound] Failed to clear internal keycode: {}", e);
+                }
+            }
+            st.keymaps[keymap_idx] = 0x0000;
+            info!("[sound] Cleared internal keycode from LED {} (keymap {})", key_index, keymap_idx);
+        }
+
+        keymaps_copy = st.keymaps;
+        persist_state(&st.keys, &st.audio_config);
+    }
+    // Re-register shortcuts with updated keymaps
+    register_key_shortcuts(&app, &keymaps_copy);
+    Ok(())
+}
+
+#[tauri::command]
+fn preview_library_sound(
+    state: State<SharedState>,
+    pipeline_state: State<ManagedAudioPipeline>,
+    sound_id: String,
+) -> Result<(), String> {
+    let st = state.lock().unwrap();
+    let entry = st.audio_config.sound_library.iter()
+        .find(|e| e.id == sound_id)
+        .ok_or("Sound not found in library")?;
+    let filename = entry.filename.clone();
+    drop(st);
+
+    let path = audio::resolve_sound_path(&filename).map_err(|e| e.to_string())?;
+    let pl = pipeline_state.0.lock().unwrap();
+    if let Some(ref pipeline) = *pl {
+        pipeline.play_sound(&path).map_err(|e| e.to_string())
+    } else {
+        // Fallback: play through default output when soundboard is not running
+        audio::preview_trim(
+            path.to_str().unwrap_or(""),
+            0,
+            audio::get_audio_duration(path.to_str().unwrap_or(""))
+                .unwrap_or(60000),
+        ).map_err(|e| e.to_string())
+    }
+}
+
+#[tauri::command]
+fn set_sound_volume(
+    state: State<SharedState>,
+    pipeline_state: State<ManagedAudioPipeline>,
+    volume: f32,
+) -> Result<(), String> {
+    let mut st = state.lock().unwrap();
+    st.audio_config.sound_volume = volume;
+    persist_state(&st.keys, &st.audio_config);
+    drop(st);
+
+    let pl = pipeline_state.0.lock().unwrap();
+    if let Some(ref pipeline) = *pl {
+        pipeline.set_sound_volume(volume);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn set_mic_volume(
+    state: State<SharedState>,
+    pipeline_state: State<ManagedAudioPipeline>,
+    volume: f32,
+) -> Result<(), String> {
+    let mut st = state.lock().unwrap();
+    st.audio_config.mic_volume = volume;
+    persist_state(&st.keys, &st.audio_config);
+    drop(st);
+
+    let pl = pipeline_state.0.lock().unwrap();
+    if let Some(ref pipeline) = *pl {
+        pipeline.set_mic_volume(volume);
+    }
+    Ok(())
+}
+
+// ── Audio trim commands ──────────────────────────────────────────────────
+
+#[tauri::command]
+fn get_audio_duration(file_path: String) -> Result<u64, String> {
+    audio::get_audio_duration(&file_path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn preview_trim(source_path: String, start_ms: u64, end_ms: u64) -> Result<(), String> {
+    audio::preview_trim(&source_path, start_ms, end_ms).map_err(|e| e.to_string())
+}
+
 // ── Per-key toggle (triggered by physical keypress via global shortcut) ──
 
 fn do_toggle_key(app: &AppHandle, key_index: usize) {
     let state = app.state::<SharedState>();
-    let snapshot = {
+    let (snapshot, sound_filename) = {
         let mut st = state.lock().unwrap();
         if key_index >= 8 { return; }
 
@@ -640,9 +971,39 @@ fn do_toggle_key(app: &AppHandle, key_index: usize) {
         if let Some(ref dev) = st.device {
             apply_key_to_device(dev, key_index as u8, &st.keys[key_index]);
         }
-        persist_keys(&st.keys);
-        st.snapshot()
+        persist_state(&st.keys, &st.audio_config);
+        // Resolve sound filename from key_sounds → sound_library lookup
+        let filename = st.audio_config.key_sounds[key_index]
+            .as_ref()
+            .and_then(|sound_id| {
+                st.audio_config.sound_library.iter()
+                    .find(|e| &e.id == sound_id)
+                    .map(|e| e.filename.clone())
+            });
+        (st.snapshot(), filename)
     };
+
+    // Play sound if assigned
+    if let Some(ref filename) = sound_filename {
+        info!("[KEY-SHORTCUT] key={} sound={}", key_index, filename);
+        if let Ok(path) = audio::resolve_sound_path(filename) {
+            let pipeline_state = app.state::<ManagedAudioPipeline>();
+            let pl = pipeline_state.0.lock().unwrap();
+            if let Some(ref pipeline) = *pl {
+                if let Err(e) = pipeline.play_sound(&path) {
+                    warn!("[audio] Failed to play sound for key {}: {}", key_index, e);
+                }
+            } else {
+                // Fallback: play through default output when soundboard is not running
+                drop(pl);
+                let path_str = path.to_str().unwrap_or("");
+                let dur = audio::get_audio_duration(path_str).unwrap_or(60000);
+                if let Err(e) = audio::preview_trim(path_str, 0, dur) {
+                    warn!("[audio] Fallback play failed for key {}: {}", key_index, e);
+                }
+            }
+        }
+    }
 
     // Emit event so frontend updates its state
     let _ = app.emit("state-updated", &snapshot);
@@ -670,7 +1031,7 @@ fn do_toggle(app: &AppHandle) -> Result<String, String> {
         if let Some(ref dev) = st.device {
             apply_all_to_device(dev, &st.keys);
         }
-        persist_keys(&st.keys);
+        persist_state(&st.keys, &st.audio_config);
         new_slot.to_string()
     };
     info!("⚠️ [GLOBAL TOGGLE] emitting slot-toggled={}", result);
@@ -683,20 +1044,73 @@ fn do_toggle(app: &AppHandle) -> Result<String, String> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_window_state::Builder::new().build())
+        .plugin(tauri_plugin_dialog::init())
         .manage(std::sync::Mutex::new({
             let mut state = AppState::default();
-            // Restore key colors from last session
-            if let Some(keys) = profile::load_state() {
+            // Restore key colors + audio config from last session
+            if let Some((keys, audio_cfg)) = profile::load_state() {
                 state.keys = keys;
+                if let Some(cfg) = audio_cfg {
+                    state.audio_config = cfg;
+                }
+            }
+            // Migrate legacy sound_files → sound_library + key_sounds
+            if state.audio_config.sound_library.is_empty() {
+                let mut migrated = false;
+                for i in 0..8 {
+                    if let Some(ref filename) = state.audio_config.sound_files[i] {
+                        let id = filename
+                            .rsplit('.')
+                            .last()
+                            .unwrap_or(filename)
+                            .to_string();
+                        // Use the part after "keyN_" as display name, or the whole filename
+                        let display_name = filename
+                            .split('_')
+                            .skip(1)
+                            .collect::<Vec<_>>()
+                            .join("_")
+                            .rsplit('.')
+                            .last()
+                            .unwrap_or(filename)
+                            .to_string();
+                        let display_name = if display_name.is_empty() {
+                            format!("Key {} sound", i + 1)
+                        } else {
+                            display_name
+                        };
+                        state.audio_config.sound_library.push(
+                            state::SoundEntry {
+                                id: id.clone(),
+                                filename: filename.clone(),
+                                display_name,
+                            }
+                        );
+                        state.audio_config.key_sounds[i] = Some(id);
+                        migrated = true;
+                    }
+                }
+                if migrated {
+                    info!("[migration] Migrated {} legacy sound_files to sound_library",
+                          state.audio_config.sound_library.len());
+                }
             }
             state
         }))
+        .manage(ManagedAudioPipeline(std::sync::Mutex::new(None)))
         .setup(|app| {
             // Persist initial state to disk (ensures state.json exists)
             {
                 let state = app.state::<SharedState>();
                 let st = state.lock().unwrap();
-                persist_keys(&st.keys);
+                persist_state(&st.keys, &st.audio_config);
+            }
+
+            // Auto-start audio pipeline if both devices are configured
+            {
+                let state = app.state::<SharedState>();
+                let pipeline_state = app.state::<ManagedAudioPipeline>();
+                try_auto_start_pipeline(&state, &pipeline_state);
             }
 
             // Register plugins
@@ -728,6 +1142,11 @@ pub fn run() {
                                 info!("[SHORTCUT] \"{}\" → led={} replay=0x{:04X}",
                                       shortcut_str, led_idx, keycode);
                                 do_toggle_key(app, led_idx);
+
+                                // Skip keystroke replay for internal (sound-only) keycodes
+                                if is_internal_keycode(keycode) {
+                                    return;
+                                }
 
                                 // Replay: unregister → simulate keystroke → re-register
                                 // Done on a thread to avoid blocking the UI.
@@ -829,6 +1248,22 @@ pub fn run() {
             set_rgb_speed,
             set_rgb_color,
             save_rgb_matrix,
+            // Soundboard
+            list_audio_devices,
+            set_audio_input_device,
+            set_audio_output_device,
+            set_sound_volume,
+            set_mic_volume,
+            // Sound library
+            add_to_sound_library,
+            add_to_sound_library_trimmed,
+            remove_from_sound_library,
+            rename_sound,
+            set_key_sound,
+            preview_library_sound,
+            // Audio trim
+            get_audio_duration,
+            preview_trim,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

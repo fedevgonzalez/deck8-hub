@@ -5,6 +5,7 @@ import { Toolbar } from "@/components/toolbar";
 import { ColorView } from "@/components/color-view";
 import { KeyAssignmentView } from "@/components/key-assignment-view";
 import { SettingsView } from "@/components/settings-view";
+import { SoundView } from "@/components/sound-view";
 import { useDeck8 } from "@/hooks/use-deck8";
 import { Unplug, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -33,6 +34,20 @@ export default function App() {
     updateRgb,
     updateRgbColor,
     saveRgb,
+    audioDevices,
+    refreshAudioDevices,
+    selectAudioInput,
+    selectAudioOutput,
+    updateSoundVolume,
+    updateMicVolume,
+    addToLibrary,
+    addToLibraryTrimmed,
+    removeFromLibrary,
+    renameSound,
+    setKeySound,
+    previewLibrarySound,
+    getFileDuration,
+    previewTrimmedAudio,
   } = useDeck8();
 
   return (
@@ -62,6 +77,14 @@ export default function App() {
               keymaps={state.keymaps}
               connected={state.connected}
               onKeycodeChange={updateKeycode}
+              soundLibrary={state.audio_config.sound_library}
+              keySounds={state.audio_config.key_sounds}
+              onSetKeySound={setKeySound}
+              onPreviewLibrarySound={previewLibrarySound}
+              onGetDuration={getFileDuration}
+              onPreviewTrim={previewTrimmedAudio}
+              onAddToLibrary={addToLibrary}
+              onAddToLibraryTrimmed={addToLibraryTrimmed}
             />
           </TabsContent>
 
@@ -74,6 +97,26 @@ export default function App() {
               onToggleOverride={toggleKeyOverride}
               onToggleKeySlot={toggleKeySlot}
               onSaveCustom={saveCustom}
+            />
+          </TabsContent>
+
+          <TabsContent value="sound" className="flex flex-col flex-1 min-h-0 overflow-hidden animate-fade-in">
+            <SoundView
+              audioConfig={state.audio_config}
+              audioDevices={audioDevices}
+              onSelectInput={selectAudioInput}
+              onSelectOutput={selectAudioOutput}
+              onSoundVolumeChange={updateSoundVolume}
+              onMicVolumeChange={updateMicVolume}
+              onRefreshDevices={refreshAudioDevices}
+              onGetDuration={getFileDuration}
+              onPreviewTrim={previewTrimmedAudio}
+              onAddToLibrary={addToLibrary}
+              onAddToLibraryTrimmed={addToLibraryTrimmed}
+              onRemoveFromLibrary={removeFromLibrary}
+              onRenameSound={renameSound}
+              onSetKeySound={setKeySound}
+              onPreviewLibrarySound={previewLibrarySound}
             />
           </TabsContent>
 
@@ -109,10 +152,10 @@ export default function App() {
 
               {/* Text */}
               <div className="space-y-1.5">
-                <h2 className="font-pixel text-sm text-white/70 font-bold">
-                  No Device Connected
+                <h2 className="font-pixel text-sm text-white/70 font-bold uppercase tracking-wider">
+                  No Device
                 </h2>
-                <p className="font-pixel text-[10px] text-white/30 leading-relaxed">
+                <p className="font-clean text-[11px] text-white/30 leading-relaxed">
                   Connect your Deck-8 via USB and click reconnect, or the app will auto-detect on plug-in.
                 </p>
               </div>
@@ -120,7 +163,7 @@ export default function App() {
               {/* Reconnect button */}
               <button
                 type="button"
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white/[0.08] border border-white/15 text-white/70 hover:bg-white/[0.14] hover:text-white/90 hover:border-white/25 transition-all duration-150 font-pixel text-[11px] font-bold"
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white/[0.08] border border-white/15 text-white/70 hover:bg-white/[0.14] hover:text-white/90 hover:border-white/25 transition-all duration-150 font-clean text-[11px] font-bold"
                 onClick={connect}
               >
                 <RefreshCw className="w-3.5 h-3.5" />
@@ -130,7 +173,7 @@ export default function App() {
               {/* Skip hint */}
               <button
                 type="button"
-                className="font-pixel text-[8px] text-white/15 hover:text-white/30 uppercase tracking-wider transition-colors"
+                className="font-clean text-[9px] text-white/15 hover:text-white/30 transition-colors"
                 onClick={() => setOverlayDismissed(true)}
               >
                 continue without device

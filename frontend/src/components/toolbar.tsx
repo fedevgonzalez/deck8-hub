@@ -8,6 +8,7 @@ import {
   Keyboard,
   Palette,
   Settings,
+  Volume2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import packageJson from "../../package.json";
@@ -54,6 +55,16 @@ export function Toolbar({
           Color
         </TabsTrigger>
         <TabsTrigger
+          value="sound"
+          className="toolbar-tab text-[10px] h-7 rounded-md px-2.5 gap-1.5 font-semibold tracking-wide
+            data-[state=inactive]:text-white/30 data-[state=inactive]:hover:text-white/55 data-[state=inactive]:hover:bg-white/[0.04]
+            data-[state=active]:bg-white/[0.10] data-[state=active]:text-white/90 data-[state=active]:shadow-none
+            transition-all duration-100 cursor-default"
+        >
+          <Volume2 className="w-3 h-3" />
+          Sound
+        </TabsTrigger>
+        <TabsTrigger
           value="settings"
           className="toolbar-tab text-[10px] h-7 rounded-md px-2.5 gap-1.5 font-semibold tracking-wide
             data-[state=inactive]:text-white/30 data-[state=inactive]:hover:text-white/55 data-[state=inactive]:hover:bg-white/[0.04]
@@ -69,7 +80,7 @@ export function Toolbar({
       <div className="flex-1" />
 
       {/* Version */}
-      <span className="font-pixel text-[8px] text-white/15 uppercase tracking-wider mr-1">
+      <span className="font-clean text-[9px] text-white/15 mr-1">
         v{packageJson.version}
       </span>
 

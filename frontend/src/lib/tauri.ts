@@ -32,6 +32,32 @@ export interface RgbMatrixState {
   color_s: number;
 }
 
+export interface SoundEntry {
+  id: string;
+  filename: string;
+  display_name: string;
+}
+
+export interface AudioConfig {
+  sound_files: (string | null)[];
+  sound_library: SoundEntry[];
+  key_sounds: (string | null)[];
+  audio_input_device: string | null;
+  audio_output_device: string | null;
+  sound_volume: number;
+  mic_volume: number;
+  soundboard_enabled: boolean;
+}
+
+export interface AudioDeviceInfo {
+  name: string;
+}
+
+export interface AudioDeviceList {
+  input_devices: AudioDeviceInfo[];
+  output_devices: AudioDeviceInfo[];
+}
+
 export interface StateSnapshot {
   connected: boolean;
   keys: KeyConfig[];
@@ -39,6 +65,16 @@ export interface StateSnapshot {
   keymaps: number[];
   device_info: DeviceInfo | null;
   rgb_matrix: RgbMatrixState | null;
+  audio_config: AudioConfig;
+}
+
+// ── Internal keycode detection ──────────────────────────────────────
+// Internal keycodes (Ctrl+Alt+Shift+1..8 = 0x071E..0x0725) are auto-assigned
+// to keys that have a sound but no user-set shortcut. They should be hidden
+// from the UI since the user didn't set them.
+const INTERNAL_KEYCODE_BASE = 0x071e;
+export function isInternalKeycode(keycode: number): boolean {
+  return keycode >= INTERNAL_KEYCODE_BASE && keycode < INTERNAL_KEYCODE_BASE + 8;
 }
 
 // ── Runtime detection ───────────────────────────────────────────────
@@ -183,6 +219,84 @@ export function setRgbColor(h: number, s: number): Promise<void> {
 export function saveRgbMatrix(): Promise<void> {
   if (!isTauri) return Promise.resolve();
   return tauriInvoke("save_rgb_matrix");
+}
+
+// ── Soundboard ──────────────────────────────────────────────────────
+
+export function listAudioDevices(): Promise<AudioDeviceList> {
+  if (!isTauri) return Promise.resolve({ input_devices: [], output_devices: [] });
+  return tauriInvoke<AudioDeviceList>("list_audio_devices");
+}
+
+export function setAudioInputDevice(name: string): Promise<void> {
+  if (!isTauri) return Promise.resolve();
+  return tauriInvoke("set_audio_input_device", { name });
+}
+
+export function setAudioOutputDevice(name: string): Promise<void> {
+  if (!isTauri) return Promise.resolve();
+  return tauriInvoke("set_audio_output_device", { name });
+}
+
+export function setSoundVolume(volume: number): Promise<void> {
+  if (!isTauri) return Promise.resolve();
+  return tauriInvoke("set_sound_volume", { volume });
+}
+
+export function setMicVolume(volume: number): Promise<void> {
+  if (!isTauri) return Promise.resolve();
+  return tauriInvoke("set_mic_volume", { volume });
+}
+
+// ── Sound Library ───────────────────────────────────────────────────
+
+export function addToSoundLibrary(filePath: string, displayName: string): Promise<SoundEntry> {
+  if (!isTauri) return Promise.reject("Not in Tauri");
+  return tauriInvoke<SoundEntry>("add_to_sound_library", { filePath, displayName });
+}
+
+export function addToSoundLibraryTrimmed(
+  filePath: string,
+  displayName: string,
+  startMs: number,
+  endMs: number,
+): Promise<SoundEntry> {
+  if (!isTauri) return Promise.reject("Not in Tauri");
+  return tauriInvoke<SoundEntry>("add_to_sound_library_trimmed", {
+    filePath, displayName, startMs, endMs,
+  });
+}
+
+export function removeFromSoundLibrary(soundId: string): Promise<void> {
+  if (!isTauri) return Promise.resolve();
+  return tauriInvoke("remove_from_sound_library", { soundId });
+}
+
+export function renameSound(soundId: string, newName: string): Promise<void> {
+  if (!isTauri) return Promise.resolve();
+  return tauriInvoke("rename_sound", { soundId, newName });
+}
+
+export function setKeySound(keyIndex: number, soundId: string | null): Promise<void> {
+  if (!isTauri) return Promise.resolve();
+  return tauriInvoke("set_key_sound", { keyIndex, soundId });
+}
+
+export function previewLibrarySound(soundId: string): Promise<void> {
+  if (!isTauri) return Promise.resolve();
+  return tauriInvoke("preview_library_sound", { soundId });
+}
+
+// ── Audio trim ──────────────────────────────────────────────────────
+
+export function getAudioDuration(filePath: string): Promise<number> {
+  if (!isTauri) return Promise.resolve(0);
+  return tauriInvoke<number>("get_audio_duration", { filePath });
+}
+
+export function previewTrim(sourcePath: string, startMs: number, endMs: number): Promise<void> {
+  if (!isTauri) return Promise.resolve();
+  return tauriInvoke("preview_trim", { sourcePath, startMs, endMs });
 }
 
 // ── Events ──────────────────────────────────────────────────────────

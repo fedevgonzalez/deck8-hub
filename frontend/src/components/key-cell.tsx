@@ -2,6 +2,7 @@ import { memo } from "react";
 import { hsvToRgb } from "@/lib/hsv";
 import type { KeyConfig } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
+import { Volume2 } from "lucide-react";
 
 interface KeyCellProps {
   config: KeyConfig;
@@ -10,6 +11,7 @@ interface KeyCellProps {
   onToggleSlot?: () => void;
   mode?: "color" | "keycode";
   keycodeLabel?: string;
+  soundName?: string | null;
 }
 
 export const KeyCell = memo(function KeyCell({
@@ -18,6 +20,7 @@ export const KeyCell = memo(function KeyCell({
   onClick,
   mode = "color",
   keycodeLabel,
+  soundName,
 }: KeyCellProps) {
   const keySlot = config.active_slot ?? "A";
   const activeColor = keySlot === "A" ? config.slot_a : config.slot_b;
@@ -49,6 +52,14 @@ export const KeyCell = memo(function KeyCell({
         <span className="font-pixel text-[13px] text-white/80 leading-tight text-center px-1.5 truncate max-w-full">
           {keycodeLabel || "\u2014"}
         </span>
+        {soundName && (
+          <div className="absolute bottom-1 left-0 right-0 flex items-center justify-center gap-0.5">
+            <Volume2 className="w-2.5 h-2.5 text-cyan-400/50" />
+            <span className="font-clean text-[8px] text-cyan-400/40 truncate max-w-[56px]">
+              {soundName}
+            </span>
+          </div>
+        )}
       </button>
     );
   }

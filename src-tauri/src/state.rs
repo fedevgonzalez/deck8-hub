@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Mutex;
 
+use crate::audio::AudioPipeline;
 use crate::hid::Deck8Device;
 use crate::protocol::{DeviceInfo, HsvColor, RgbMatrixState};
 
@@ -42,6 +43,61 @@ impl Default for KeyConfig {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SoundEntry {
+    pub id: String,
+    pub filename: String,
+    pub display_name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AudioConfig {
+    /// Legacy field kept for backward-compat deserialization only.
+    #[serde(default)]
+    pub sound_files: [Option<String>; 8],
+    /// Sound library: unlimited collection of sound entries.
+    #[serde(default)]
+    pub sound_library: Vec<SoundEntry>,
+    /// Per-key sound assignment: each key references a SoundEntry.id (or None).
+    #[serde(default = "default_key_sounds")]
+    pub key_sounds: [Option<String>; 8],
+    #[serde(default)]
+    pub audio_input_device: Option<String>,
+    #[serde(default)]
+    pub audio_output_device: Option<String>,
+    #[serde(default = "default_volume")]
+    pub sound_volume: f32,
+    #[serde(default = "default_volume")]
+    pub mic_volume: f32,
+    #[serde(default)]
+    pub soundboard_enabled: bool,
+}
+
+fn default_volume() -> f32 {
+    1.0
+}
+
+fn default_key_sounds() -> [Option<String>; 8] {
+    Default::default()
+}
+
+impl Default for AudioConfig {
+    fn default() -> Self {
+        Self {
+            sound_files: Default::default(),
+            sound_library: Vec::new(),
+            key_sounds: Default::default(),
+            audio_input_device: None,
+            audio_output_device: None,
+            sound_volume: 1.0,
+            mic_volume: 1.0,
+            soundboard_enabled: false,
+        }
+    }
+}
+
+pub struct ManagedAudioPipeline(pub Mutex<Option<AudioPipeline>>);
+
 pub struct AppState {
     pub device: Option<Deck8Device>,
     pub keys: [KeyConfig; 8],
@@ -51,6 +107,7 @@ pub struct AppState {
     pub rgb_matrix: Option<RgbMatrixState>,
     /// Maps shortcut display string → (LED index, QMK keycode, register string)
     pub shortcut_map: HashMap<String, (usize, u16, String)>,
+    pub audio_config: AudioConfig,
 }
 
 impl Default for AppState {
@@ -63,6 +120,7 @@ impl Default for AppState {
             device_info: None,
             rgb_matrix: None,
             shortcut_map: HashMap::new(),
+            audio_config: AudioConfig::default(),
         }
     }
 }
@@ -76,6 +134,7 @@ pub struct StateSnapshot {
     pub keymaps: Vec<u16>,
     pub device_info: Option<DeviceInfo>,
     pub rgb_matrix: Option<RgbMatrixState>,
+    pub audio_config: AudioConfig,
 }
 
 impl AppState {
@@ -87,9 +146,9 @@ impl AppState {
             keymaps: self.keymaps.to_vec(),
             device_info: self.device_info.clone(),
             rgb_matrix: self.rgb_matrix,
+            audio_config: self.audio_config.clone(),
         }
     }
-
 }
 
 pub type SharedState = Mutex<AppState>;

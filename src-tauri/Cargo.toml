@@ -1,6 +1,6 @@
 [package]
 name = "deck8-hub"
-version = "1.0.2"
+version = "1.0.3"
 edition = "2021"
 
 [lib]
@@ -22,6 +22,10 @@ env_logger = "0.11"
 enigo = "0.2"
 dirs = "6"
 tauri-plugin-window-state = "2.4.1"
+tauri-plugin-dialog = "2"
+rodio = { version = "0.19", features = ["symphonia-aac", "symphonia-isomp4"] }
+ringbuf = "0.4"
+hound = "3.5"
 
 [target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
 tauri-plugin-autostart = "2.5.1"

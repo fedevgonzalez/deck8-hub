@@ -112,7 +112,7 @@ export function SettingsView({
                 type="button"
                 className={cn(
                   "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg",
-                  "font-pixel text-[9px] uppercase tracking-wide font-bold",
+                  "font-pixel text-[9px] uppercase tracking-wider font-bold",
                   "text-emerald-400/60 hover:text-emerald-400/90",
                   "bg-emerald-500/[0.06] hover:bg-emerald-500/[0.12]",
                   "border border-emerald-500/15 hover:border-emerald-500/30",
@@ -130,7 +130,7 @@ export function SettingsView({
               <div className="flex items-center gap-1.5">
                 <Sparkles className="w-3 h-3 text-white/20" />
                 <span className="font-pixel text-[9px] text-white/40 uppercase tracking-wider">Effect</span>
-                <span className="font-pixel text-[9px] text-violet-400/60 ml-auto">{currentEffect?.name}</span>
+                <span className="font-clean text-[10px] text-violet-400/60 ml-auto">{currentEffect?.name}</span>
               </div>
               <div className="grid grid-cols-3 gap-1 max-h-[140px] overflow-y-auto p-1.5 rounded-lg bg-[#0d0d0f] border border-white/[0.06]">
                 {RGB_EFFECTS.map((effect) => (
@@ -139,7 +139,7 @@ export function SettingsView({
                     type="button"
                     className={cn(
                       "px-2 py-1.5 rounded-md text-left transition-all",
-                      "font-pixel text-[8px] leading-tight truncate",
+                      "font-clean text-[9px] leading-tight truncate",
                       rgbMatrix.effect === effect.id
                         ? "bg-violet-500/20 text-violet-300/90 border border-violet-400/30"
                         : "bg-transparent text-white/30 border border-transparent hover:bg-white/[0.04] hover:text-white/50",
@@ -158,7 +158,7 @@ export function SettingsView({
               <div className="flex items-center gap-1.5">
                 <Sun className="w-3 h-3 text-white/20" />
                 <span className="font-pixel text-[9px] text-white/40 uppercase tracking-wider">Brightness</span>
-                <span className="font-pixel text-[9px] text-white/50 tabular-nums ml-auto">{Math.round(rgbMatrix.brightness / 255 * 100)}%</span>
+                <span className="font-clean text-[10px] text-white/50 tabular-nums ml-auto">{Math.round(rgbMatrix.brightness / 255 * 100)}%</span>
               </div>
               <Slider
                 min={0}
@@ -174,7 +174,7 @@ export function SettingsView({
               <div className="flex items-center gap-1.5">
                 <Gauge className="w-3 h-3 text-white/20" />
                 <span className="font-pixel text-[9px] text-white/40 uppercase tracking-wider">Speed</span>
-                <span className="font-pixel text-[9px] text-white/50 tabular-nums ml-auto">{Math.round(rgbMatrix.speed / 255 * 100)}%</span>
+                <span className="font-clean text-[10px] text-white/50 tabular-nums ml-auto">{Math.round(rgbMatrix.speed / 255 * 100)}%</span>
               </div>
               <Slider
                 min={0}
@@ -197,7 +197,7 @@ export function SettingsView({
               </div>
               <div className="flex flex-col gap-2">
                 <div className="flex items-center gap-2">
-                  <span className="font-pixel text-[8px] text-white/25 w-4">H</span>
+                  <span className="font-clean text-[10px] text-white/25 w-4">H</span>
                   <div className="flex-1 slider-hue">
                     <Slider
                       min={0}
@@ -207,10 +207,10 @@ export function SettingsView({
                       onValueChange={([h]) => onRgbColorChange(h, rgbMatrix.color_s)}
                     />
                   </div>
-                  <span className="font-pixel text-[8px] text-white/40 tabular-nums w-6 text-right">{rgbMatrix.color_h}</span>
+                  <span className="font-clean text-[10px] text-white/40 tabular-nums w-6 text-right">{rgbMatrix.color_h}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="font-pixel text-[8px] text-white/25 w-4">S</span>
+                  <span className="font-clean text-[10px] text-white/25 w-4">S</span>
                   <div className="flex-1">
                     <Slider
                       min={0}
@@ -220,7 +220,7 @@ export function SettingsView({
                       onValueChange={([s]) => onRgbColorChange(rgbMatrix.color_h, s)}
                     />
                   </div>
-                  <span className="font-pixel text-[8px] text-white/40 tabular-nums w-6 text-right">{rgbMatrix.color_s}</span>
+                  <span className="font-clean text-[10px] text-white/40 tabular-nums w-6 text-right">{rgbMatrix.color_s}</span>
                 </div>
               </div>
             </div>
@@ -248,9 +248,9 @@ export function SettingsView({
               <Power className="w-3.5 h-3.5" />
             </div>
             <div className="flex-1 min-w-0">
-              <div className="font-pixel text-[11px] text-white/80">Launch on startup</div>
-              <div className="font-pixel text-[8px] text-white/30 uppercase tracking-wider mt-0.5">
-                {autostart ? "enabled — starts minimized" : "disabled"}
+              <div className="font-clean text-[11px] text-white/80 font-medium">Launch on startup</div>
+              <div className="font-clean text-[9px] text-white/30 mt-0.5">
+                {autostart ? "Enabled — starts minimized" : "Disabled"}
               </div>
             </div>
             <button
@@ -279,12 +279,12 @@ export function SettingsView({
               <Monitor className="w-3.5 h-3.5" />
             </div>
             <div className="flex-1 min-w-0">
-              <div className="font-pixel text-[11px] text-white/80">Minimize to tray</div>
-              <div className="font-pixel text-[8px] text-white/30 uppercase tracking-wider mt-0.5">
-                always on — close hides to system tray
+              <div className="font-clean text-[11px] text-white/80 font-medium">Minimize to tray</div>
+              <div className="font-clean text-[9px] text-white/30 mt-0.5">
+                Always on — close hides to system tray
               </div>
             </div>
-            <span className="font-pixel text-[8px] text-emerald-400/60 uppercase">on</span>
+            <span className="font-pixel text-[8px] text-emerald-400/60 uppercase tracking-wider">on</span>
           </div>
         </div>
 
@@ -308,8 +308,8 @@ export function SettingsView({
                   )}>
                     <RotateCcw className="w-3 h-3 text-white/25" />
                     <div className="text-left">
-                      <div className="font-pixel text-[9px] text-white/60">Restore Colors</div>
-                      <div className="font-pixel text-[7px] text-white/20">Reset all key colors</div>
+                      <div className="font-clean text-[10px] text-white/60">Restore Colors</div>
+                      <div className="font-clean text-[9px] text-white/20">Reset all key colors</div>
                     </div>
                   </button>
                 </AlertDialogTrigger>
@@ -338,8 +338,8 @@ export function SettingsView({
                   )}>
                     <Keyboard className="w-3 h-3 text-white/25" />
                     <div className="text-left">
-                      <div className="font-pixel text-[9px] text-white/60">Reset Keymaps</div>
-                      <div className="font-pixel text-[7px] text-white/20">Default key bindings</div>
+                      <div className="font-clean text-[10px] text-white/60">Reset Keymaps</div>
+                      <div className="font-clean text-[9px] text-white/20">Default key bindings</div>
                     </div>
                   </button>
                 </AlertDialogTrigger>
@@ -368,8 +368,8 @@ export function SettingsView({
                   )}>
                     <Eraser className="w-3 h-3 text-white/25" />
                     <div className="text-left">
-                      <div className="font-pixel text-[9px] text-white/60">Reset Macros</div>
-                      <div className="font-pixel text-[7px] text-white/20">Clear macro buffer</div>
+                      <div className="font-clean text-[10px] text-white/60">Reset Macros</div>
+                      <div className="font-clean text-[9px] text-white/20">Clear macro buffer</div>
                     </div>
                   </button>
                 </AlertDialogTrigger>
@@ -398,8 +398,8 @@ export function SettingsView({
                   )}>
                     <Cpu className="w-3 h-3 text-red-400/30" />
                     <div className="text-left">
-                      <div className="font-pixel text-[9px] text-red-300/50">EEPROM Reset</div>
-                      <div className="font-pixel text-[7px] text-red-300/20">Full factory reset</div>
+                      <div className="font-clean text-[10px] text-red-300/50">EEPROM Reset</div>
+                      <div className="font-clean text-[9px] text-red-300/20">Full factory reset</div>
                     </div>
                   </button>
                 </AlertDialogTrigger>
@@ -429,8 +429,8 @@ export function SettingsView({
                 )}>
                   <Cpu className="w-3 h-3 text-red-400/30" />
                   <div className="text-left flex-1">
-                    <div className="font-pixel text-[9px] text-red-300/50">Enter Bootloader</div>
-                    <div className="font-pixel text-[7px] text-red-300/20">For firmware flashing — device will disconnect</div>
+                    <div className="font-clean text-[10px] text-red-300/50">Enter Bootloader</div>
+                    <div className="font-clean text-[9px] text-red-300/20">For firmware flashing — device will disconnect</div>
                   </div>
                 </button>
               </AlertDialogTrigger>
@@ -457,7 +457,7 @@ export function SettingsView({
         {/* ── Footer ────────────────────────────────────── */}
         <div className="flex items-center gap-2 px-5 py-2.5">
           <Info className="w-3 h-3 text-white/15" />
-          <span className="font-pixel text-[8px] text-white/20 uppercase tracking-wider">
+          <span className="font-pixel text-[8px] text-white/20 uppercase tracking-widest">
             churrosoft
           </span>
         </div>

@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { KeyGrid } from "@/components/key-grid";
 import { KeyEditorDialog } from "@/components/key-editor-dialog";
+import { SoundUploadDialog } from "@/components/sound-upload-dialog";
 import { keycodeToLabel } from "@/lib/keycodes";
 import { Unplug } from "lucide-react";
-import type { KeyConfig } from "@/lib/tauri";
+import { isInternalKeycode } from "@/lib/tauri";
+import type { KeyConfig, SoundEntry } from "@/lib/tauri";
 
 /**
  * Maps LED index → matrix index.
@@ -18,6 +20,14 @@ interface KeyAssignmentViewProps {
   keymaps: number[];
   connected: boolean;
   onKeycodeChange: (keyIndex: number, keycode: number) => void;
+  soundLibrary: SoundEntry[];
+  keySounds: (string | null)[];
+  onSetKeySound: (keyIndex: number, soundId: string | null) => void;
+  onPreviewLibrarySound: (soundId: string) => void;
+  onGetDuration: (filePath: string) => Promise<number>;
+  onPreviewTrim: (sourcePath: string, startMs: number, endMs: number) => void;
+  onAddToLibrary: (filePath: string, displayName: string) => Promise<SoundEntry | null>;
+  onAddToLibraryTrimmed: (filePath: string, displayName: string, startMs: number, endMs: number) => Promise<SoundEntry | null>;
 }
 
 export function KeyAssignmentView({
@@ -25,15 +35,34 @@ export function KeyAssignmentView({
   keymaps,
   connected,
   onKeycodeChange,
+  soundLibrary,
+  keySounds,
+  onSetKeySound,
+  onPreviewLibrarySound,
+  onGetDuration,
+  onPreviewTrim,
+  onAddToLibrary,
+  onAddToLibraryTrimmed,
 }: KeyAssignmentViewProps) {
   const [selectedKey, setSelectedKey] = useState<number | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
 
   // Remap keycodeLabels from matrix order to LED order so KeyGrid
   // (which iterates by LED index) shows the correct keycode per position.
-  const keycodeLabels = LED_TO_MATRIX.map((matrixIdx) =>
-    keycodeToLabel(keymaps[matrixIdx]),
-  );
+  // Internal keycodes (auto-assigned for sound-only keys) show as empty.
+  const keycodeLabels = LED_TO_MATRIX.map((matrixIdx) => {
+    const kc = keymaps[matrixIdx];
+    return isInternalKeycode(kc) ? "" : keycodeToLabel(kc);
+  });
+
+  // Resolve sound names for each key (by LED/hw index)
+  const soundNames = Array.from({ length: 8 }, (_, hwIndex) => {
+    const soundId = keySounds[hwIndex];
+    if (!soundId) return null;
+    const entry = soundLibrary.find((e) => e.id === soundId);
+    return entry?.display_name ?? null;
+  });
 
   const handleKeyClick = (ledIndex: number) => {
     setSelectedKey(ledIndex);
@@ -42,6 +71,10 @@ export function KeyAssignmentView({
 
   // Convert selected LED index to matrix index for keymap operations
   const matrixIndex = selectedKey !== null ? LED_TO_MATRIX[selectedKey] : null;
+
+  const handleAddSoundFromDialog = useCallback(() => {
+    setUploadOpen(true);
+  }, []);
 
   return (
     <div className="flex flex-1 min-h-0 items-center justify-center">
@@ -53,6 +86,7 @@ export function KeyAssignmentView({
             onSelectKey={handleKeyClick}
             mode="keycode"
             keycodeLabels={keycodeLabels}
+            soundNames={soundNames}
           />
         </div>
         {!connected && (
@@ -75,8 +109,22 @@ export function KeyAssignmentView({
             setEditorOpen(false);
             setSelectedKey(null);
           }}
+          soundLibrary={soundLibrary}
+          currentSoundId={keySounds[selectedKey] ?? null}
+          onSoundChange={(soundId) => onSetKeySound(selectedKey, soundId)}
+          onPreviewSound={onPreviewLibrarySound}
+          onAddSound={handleAddSoundFromDialog}
         />
       )}
+
+      <SoundUploadDialog
+        open={uploadOpen}
+        onClose={() => setUploadOpen(false)}
+        onGetDuration={onGetDuration}
+        onPreviewTrim={onPreviewTrim}
+        onAddToLibrary={onAddToLibrary}
+        onAddToLibraryTrimmed={onAddToLibraryTrimmed}
+      />
     </div>
   );
 }
