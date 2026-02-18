@@ -263,9 +263,9 @@ fn apply_key_to_device(dev: &hid::Deck8Device, key_index: u8, key: &KeyConfig) {
     }
 }
 
-/// Persist key + audio state to disk (fire-and-forget).
-fn persist_state(keys: &[KeyConfig; 8], audio_config: &AudioConfig) {
-    if let Err(e) = profile::save_state(keys, audio_config) {
+/// Persist key + audio state + keymaps to disk (fire-and-forget).
+fn persist_state(keys: &[KeyConfig; 8], audio_config: &AudioConfig, keymaps: &[u16; 8]) {
+    if let Err(e) = profile::save_state(keys, audio_config, keymaps) {
         error!("Failed to persist state: {e:#}");
     }
 }
@@ -281,25 +281,28 @@ fn apply_all_to_device(dev: &hid::Deck8Device, keys: &[KeyConfig; 8]) {
 
 #[tauri::command]
 fn connect_device(app: AppHandle, state: State<SharedState>) -> bool {
+    let t0 = std::time::Instant::now();
     let mut s = state.lock().unwrap();
     match hid::Deck8Device::open() {
         Ok(dev) => {
+            info!("[connect] HID open: {}ms", t0.elapsed().as_millis());
             let mut keymaps_copy = [0u16; 8];
             match dev.read_all_keycodes() {
                 Ok(keymaps) => {
                     s.keymaps = keymaps;
                     keymaps_copy = keymaps;
-                    info!("[connect] Keymaps: {:?}",
+                    info!("[connect] Keymaps read: {}ms {:?}",
+                          t0.elapsed().as_millis(),
                           keymaps.iter().map(|k| format!("0x{:04X}", k)).collect::<Vec<_>>());
                 }
                 Err(e) => error!("Failed to read keymaps: {e:#}"),
             }
             match dev.get_device_info() {
-                Ok(info) => s.device_info = Some(info),
+                Ok(info) => { s.device_info = Some(info); info!("[connect] Device info: {}ms", t0.elapsed().as_millis()); }
                 Err(e) => error!("Failed to read device info: {e:#}"),
             }
             match dev.rgb_get_state() {
-                Ok(rgb) => s.rgb_matrix = Some(rgb),
+                Ok(rgb) => { s.rgb_matrix = Some(rgb); info!("[connect] RGB state: {}ms", t0.elapsed().as_millis()); }
                 Err(e) => error!("Failed to read RGB state: {e:#}"),
             }
             s.device = Some(dev);
@@ -310,10 +313,12 @@ fn connect_device(app: AppHandle, state: State<SharedState>) -> bool {
                     info!("[connect]   key={} override={} slot={:?}", i, k.override_enabled, k.active_slot);
                 }
                 apply_all_to_device(dev, &s.keys);
+                info!("[connect] Keys synced: {}ms", t0.elapsed().as_millis());
                 info!("[connect] Saving clean state to EEPROM...");
                 if let Err(e) = dev.custom_save() {
                     error!("[connect] custom_save FAILED: {:#}", e);
                 }
+                info!("[connect] EEPROM saved: {}ms", t0.elapsed().as_millis());
             }
             // Migrate old internal keycodes (0x071E range) to new range (0x0F68)
             for km_idx in 0..8 {
@@ -355,6 +360,7 @@ fn connect_device(app: AppHandle, state: State<SharedState>) -> bool {
             drop(s);
             // Register per-key shortcuts based on actual device keymaps
             register_key_shortcuts(&app, &keymaps_copy);
+            info!("[connect] TOTAL: {}ms", t0.elapsed().as_millis());
             true
         }
         Err(e) => {
@@ -400,7 +406,7 @@ fn set_key_color(
                 .map_err(|e| e.to_string())?;
         }
     }
-    persist_state(&st.keys, &st.audio_config);
+    persist_state(&st.keys, &st.audio_config, &st.keymaps);
     Ok(())
 }
 
@@ -424,7 +430,7 @@ fn toggle_slot(state: State<SharedState>) -> Result<String, String> {
     if let Some(ref dev) = st.device {
         apply_all_to_device(dev, &st.keys);
     }
-    persist_state(&st.keys, &st.audio_config);
+    persist_state(&st.keys, &st.audio_config, &st.keymaps);
     Ok(new_slot.to_string())
 }
 
@@ -448,7 +454,7 @@ fn toggle_key_slot(
     if let Some(ref dev) = st.device {
         apply_key_to_device(dev, key_index as u8, &st.keys[key_index]);
     }
-    persist_state(&st.keys, &st.audio_config);
+    persist_state(&st.keys, &st.audio_config, &st.keymaps);
     Ok(st.snapshot())
 }
 
@@ -530,7 +536,7 @@ fn set_key_override(
         // Persist per-key overrides to device EEPROM
         let _ = dev.custom_save();
     }
-    persist_state(&st.keys, &st.audio_config);
+    persist_state(&st.keys, &st.audio_config, &st.keymaps);
     Ok(st.snapshot())
 }
 
@@ -542,7 +548,7 @@ fn restore_defaults(state: State<SharedState>) -> Result<StateSnapshot, String> 
         apply_all_to_device(dev, &st.keys);
         let _ = dev.custom_save();
     }
-    persist_state(&st.keys, &st.audio_config);
+    persist_state(&st.keys, &st.audio_config, &st.keymaps);
     Ok(st.snapshot())
 }
 
@@ -764,7 +770,7 @@ fn try_auto_start_pipeline(
             *pl = Some(pipeline);
             let mut st = state.lock().unwrap();
             st.audio_config.soundboard_enabled = true;
-            persist_state(&st.keys, &st.audio_config);
+            persist_state(&st.keys, &st.audio_config, &st.keymaps);
         }
         Err(e) => {
             warn!("[audio] Auto-start pipeline failed: {}", e);
@@ -781,7 +787,7 @@ fn set_audio_input_device(
     {
         let mut st = state.lock().unwrap();
         st.audio_config.audio_input_device = Some(name);
-        persist_state(&st.keys, &st.audio_config);
+        persist_state(&st.keys, &st.audio_config, &st.keymaps);
     }
     try_auto_start_pipeline(&state, &pipeline_state);
     Ok(())
@@ -796,7 +802,7 @@ fn set_audio_output_device(
     {
         let mut st = state.lock().unwrap();
         st.audio_config.audio_output_device = Some(name);
-        persist_state(&st.keys, &st.audio_config);
+        persist_state(&st.keys, &st.audio_config, &st.keymaps);
     }
     try_auto_start_pipeline(&state, &pipeline_state);
     Ok(())
@@ -812,7 +818,7 @@ fn add_to_sound_library(
         .map_err(|e| e.to_string())?;
     let mut st = state.lock().unwrap();
     st.audio_config.sound_library.push(entry.clone());
-    persist_state(&st.keys, &st.audio_config);
+    persist_state(&st.keys, &st.audio_config, &st.keymaps);
     Ok(entry)
 }
 
@@ -828,7 +834,7 @@ fn add_to_sound_library_trimmed(
         .map_err(|e| e.to_string())?;
     let mut st = state.lock().unwrap();
     st.audio_config.sound_library.push(entry.clone());
-    persist_state(&st.keys, &st.audio_config);
+    persist_state(&st.keys, &st.audio_config, &st.keymaps);
     Ok(entry)
 }
 
@@ -849,7 +855,7 @@ fn remove_from_sound_library(
             *slot = None;
         }
     }
-    persist_state(&st.keys, &st.audio_config);
+    persist_state(&st.keys, &st.audio_config, &st.keymaps);
     Ok(())
 }
 
@@ -863,7 +869,7 @@ fn rename_sound(
     if let Some(entry) = st.audio_config.sound_library.iter_mut().find(|e| e.id == sound_id) {
         entry.display_name = new_name;
     }
-    persist_state(&st.keys, &st.audio_config);
+    persist_state(&st.keys, &st.audio_config, &st.keymaps);
     Ok(())
 }
 
@@ -910,7 +916,7 @@ fn set_key_sound(
         }
 
         keymaps_copy = st.keymaps;
-        persist_state(&st.keys, &st.audio_config);
+        persist_state(&st.keys, &st.audio_config, &st.keymaps);
     }
     // Re-register shortcuts with updated keymaps
     register_key_shortcuts(&app, &keymaps_copy);
@@ -953,7 +959,7 @@ fn set_sound_volume(
 ) -> Result<(), String> {
     let mut st = state.lock().unwrap();
     st.audio_config.sound_volume = volume;
-    persist_state(&st.keys, &st.audio_config);
+    persist_state(&st.keys, &st.audio_config, &st.keymaps);
     drop(st);
 
     let pl = pipeline_state.0.lock().unwrap();
@@ -971,7 +977,7 @@ fn set_mic_volume(
 ) -> Result<(), String> {
     let mut st = state.lock().unwrap();
     st.audio_config.mic_volume = volume;
-    persist_state(&st.keys, &st.audio_config);
+    persist_state(&st.keys, &st.audio_config, &st.keymaps);
     drop(st);
 
     let pl = pipeline_state.0.lock().unwrap();
@@ -1014,7 +1020,7 @@ fn do_toggle_key(app: &AppHandle, key_index: usize) {
         if let Some(ref dev) = st.device {
             apply_key_to_device(dev, key_index as u8, &st.keys[key_index]);
         }
-        persist_state(&st.keys, &st.audio_config);
+        persist_state(&st.keys, &st.audio_config, &st.keymaps);
         // Resolve sound filename from key_sounds → sound_library lookup
         let filename = st.audio_config.key_sounds[key_index]
             .as_ref()
@@ -1074,7 +1080,7 @@ fn do_toggle(app: &AppHandle) -> Result<String, String> {
         if let Some(ref dev) = st.device {
             apply_all_to_device(dev, &st.keys);
         }
-        persist_state(&st.keys, &st.audio_config);
+        persist_state(&st.keys, &st.audio_config, &st.keymaps);
         new_slot.to_string()
     };
     info!("⚠️ [GLOBAL TOGGLE] emitting slot-toggled={}", result);
@@ -1091,10 +1097,13 @@ pub fn run() {
         .manage(std::sync::Mutex::new({
             let mut state = AppState::default();
             // Restore key colors + audio config from last session
-            if let Some((keys, audio_cfg)) = profile::load_state() {
+            if let Some((keys, audio_cfg, keymaps)) = profile::load_state() {
                 state.keys = keys;
                 if let Some(cfg) = audio_cfg {
                     state.audio_config = cfg;
+                }
+                if let Some(km) = keymaps {
+                    state.keymaps = km;
                 }
             }
             // Migrate legacy sound_files → sound_library + key_sounds
@@ -1142,11 +1151,24 @@ pub fn run() {
         }))
         .manage(ManagedAudioPipeline(std::sync::Mutex::new(None)))
         .setup(|app| {
+            // Install keyboard hook early so it's ready before device connects
+            keyboard_hook::init();
+
+            // Pre-register shortcuts from persisted keymaps (instant response on startup)
+            {
+                let state = app.state::<SharedState>();
+                let st = state.lock().unwrap();
+                if st.keymaps.iter().any(|&k| k != 0) {
+                    info!("[setup] Pre-registering shortcuts from persisted keymaps");
+                    keyboard_hook::register_shortcuts(app.handle(), &st.keymaps);
+                }
+            }
+
             // Persist initial state to disk (ensures state.json exists)
             {
                 let state = app.state::<SharedState>();
                 let st = state.lock().unwrap();
-                persist_state(&st.keys, &st.audio_config);
+                persist_state(&st.keys, &st.audio_config, &st.keymaps);
             }
 
             // Auto-start audio pipeline if both devices are configured

@@ -18,6 +18,7 @@ export default function App() {
   const [overlayDismissed, setOverlayDismissed] = useState(false);
   const {
     state,
+    connecting,
     selectedKey,
     setSelectedKey,
     connect,
@@ -57,9 +58,11 @@ export default function App() {
         <div
           className={cn(
             "h-[2px] shrink-0 transition-colors duration-300",
-            state.connected
-              ? "bg-emerald-500 shadow-[0_1px_8px_-1px_rgba(52,211,153,0.4)]"
-              : "bg-red-500/70 shadow-[0_1px_8px_-1px_rgba(239,68,68,0.3)]",
+            connecting
+              ? "bg-amber-500 shadow-[0_1px_8px_-1px_rgba(251,191,36,0.4)]"
+              : state.connected
+                ? "bg-emerald-500 shadow-[0_1px_8px_-1px_rgba(52,211,153,0.4)]"
+                : "bg-red-500/70 shadow-[0_1px_8px_-1px_rgba(239,68,68,0.3)]",
           )}
         />
 
@@ -68,6 +71,7 @@ export default function App() {
           {/* Unified toolbar: brand + tabs + connection */}
           <Toolbar
             connected={state.connected}
+            connecting={connecting}
             onReconnect={connect}
           />
 
@@ -140,44 +144,57 @@ export default function App() {
         {isTauri && !state.connected && !overlayDismissed && (
           <div className="connection-overlay fixed inset-0 z-50 flex items-center justify-center bg-[#09090b]/80 backdrop-blur-sm animate-fade-in">
             <div className="flex flex-col items-center gap-5 p-8 max-w-xs text-center">
-              {/* Pulsing icon */}
-              <div className="relative">
-                <div className="w-16 h-16 rounded-2xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center">
-                  <Unplug className="w-7 h-7 text-white/20" />
-                </div>
-                <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500/20 border border-red-500/30 flex items-center justify-center">
-                  <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse-subtle" />
-                </div>
-              </div>
-
-              {/* Text */}
-              <div className="space-y-1.5">
-                <h2 className="font-pixel text-sm text-white/70 font-bold uppercase tracking-wider">
-                  No Device
-                </h2>
-                <p className="font-clean text-[11px] text-white/30 leading-relaxed">
-                  Connect your Deck-8 via USB and click reconnect, or the app will auto-detect on plug-in.
-                </p>
-              </div>
-
-              {/* Reconnect button */}
-              <button
-                type="button"
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white/[0.08] border border-white/15 text-white/70 hover:bg-white/[0.14] hover:text-white/90 hover:border-white/25 transition-all duration-150 font-clean text-[11px] font-bold"
-                onClick={connect}
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                Reconnect
-              </button>
-
-              {/* Skip hint */}
-              <button
-                type="button"
-                className="font-clean text-[9px] text-white/15 hover:text-white/30 transition-colors"
-                onClick={() => setOverlayDismissed(true)}
-              >
-                continue without device
-              </button>
+              {connecting ? (
+                <>
+                  {/* Syncing spinner */}
+                  <div className="w-16 h-16 rounded-2xl bg-white/[0.04] border border-amber-500/20 flex items-center justify-center">
+                    <RefreshCw className="w-7 h-7 text-amber-400/60 animate-spin" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <h2 className="font-pixel text-sm text-amber-400/70 font-bold uppercase tracking-wider">
+                      Syncing
+                    </h2>
+                    <p className="font-clean text-[11px] text-white/30 leading-relaxed">
+                      Connecting to your Deck-8 and syncing key configuration…
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* Disconnected state */}
+                  <div className="relative">
+                    <div className="w-16 h-16 rounded-2xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center">
+                      <Unplug className="w-7 h-7 text-white/20" />
+                    </div>
+                    <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500/20 border border-red-500/30 flex items-center justify-center">
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse-subtle" />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <h2 className="font-pixel text-sm text-white/70 font-bold uppercase tracking-wider">
+                      No Device
+                    </h2>
+                    <p className="font-clean text-[11px] text-white/30 leading-relaxed">
+                      Connect your Deck-8 via USB and click reconnect, or the app will auto-detect on plug-in.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white/[0.08] border border-white/15 text-white/70 hover:bg-white/[0.14] hover:text-white/90 hover:border-white/25 transition-all duration-150 font-clean text-[11px] font-bold"
+                    onClick={connect}
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    Reconnect
+                  </button>
+                  <button
+                    type="button"
+                    className="font-clean text-[9px] text-white/15 hover:text-white/30 transition-colors"
+                    onClick={() => setOverlayDismissed(true)}
+                  >
+                    continue without device
+                  </button>
+                </>
+              )}
             </div>
           </div>
         )}

@@ -15,11 +15,13 @@ import packageJson from "../../package.json";
 
 interface ToolbarProps {
   connected: boolean;
+  connecting: boolean;
   onReconnect: () => void;
 }
 
 export function Toolbar({
   connected,
+  connecting,
   onReconnect,
 }: ToolbarProps) {
   return (
@@ -90,27 +92,38 @@ export function Toolbar({
           <button
             type="button"
             onClick={onReconnect}
+            disabled={connecting}
             className={cn(
               "flex items-center gap-1.5 px-2 py-1 rounded-md transition-all duration-100",
-              connected
-                ? "text-emerald-400/70 hover:bg-emerald-500/10"
-                : "text-red-400/70 hover:bg-red-500/10",
+              connecting
+                ? "text-amber-400/70 cursor-wait"
+                : connected
+                  ? "text-emerald-400/70 hover:bg-emerald-500/10"
+                  : "text-red-400/70 hover:bg-red-500/10",
             )}
           >
             <span
               className={cn(
                 "w-1.5 h-1.5 rounded-full",
-                connected ? "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.5)]" : "bg-red-400 animate-pulse-subtle",
+                connecting
+                  ? "bg-amber-400 animate-pulse-subtle shadow-[0_0_6px_rgba(251,191,36,0.5)]"
+                  : connected
+                    ? "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.5)]"
+                    : "bg-red-400 animate-pulse-subtle",
               )}
             />
             <span className="font-pixel text-[9px] font-bold uppercase">
-              {connected ? "ON" : "OFF"}
+              {connecting ? "SYNC" : connected ? "ON" : "OFF"}
             </span>
           </button>
         </TooltipTrigger>
         <TooltipContent side="bottom" sideOffset={6}>
           <p className="text-[10px]">
-            {connected ? "Device connected — click to refresh" : "Click to reconnect"}
+            {connecting
+              ? "Syncing with device…"
+              : connected
+                ? "Device connected — click to refresh"
+                : "Click to reconnect"}
           </p>
         </TooltipContent>
       </Tooltip>

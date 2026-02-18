@@ -1,17 +1,48 @@
-// Windows low-level keyboard hook for intercepting shortcuts.
-// Unlike RegisterHotKey (used by tauri_plugin_global_shortcut), a low-level hook
-// coexists with other apps that also use hooks (e.g. Wispr Flow).
-// The keystroke propagates naturally — no replay needed.
+// Windows keyboard shortcut interception using two mechanisms:
+//
+// 1. **Raw Input API** (RIDEV_INPUTSINK): Works immediately — no activation
+//    delay. Detects shortcuts from the Deck-8 as soon as the app starts.
+//    Runs on a dedicated thread with its own message pump.
+//
+// 2. **WH_KEYBOARD_LL hook** (low-level): Installed on the main/UI thread.
+//    Has a Windows limitation: doesn't receive events until the user
+//    physically interacts with the desktop. Once active, it takes over
+//    from Raw Input because it can also BLOCK keystrokes (return 1) for
+//    internal shortcuts. Coexists with other apps using hooks (e.g. Wispr Flow).
 
 #[cfg(target_os = "windows")]
 mod windows_impl {
     use log::{error, info};
+    use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Mutex, OnceLock};
+
+    // Tracked modifier state for the LL hook (main thread).
+    // Updated from hook_proc on every modifier key event.
+    // Avoids GetAsyncKeyState race conditions when modifiers and keys arrive
+    // in the same HID report (e.g. Deck-8 sending Ctrl+Alt+R).
+    static MOD_CTRL: AtomicBool = AtomicBool::new(false);
+    static MOD_SHIFT: AtomicBool = AtomicBool::new(false);
+    static MOD_ALT: AtomicBool = AtomicBool::new(false);
+    static MOD_GUI: AtomicBool = AtomicBool::new(false);
+
+    // True once the LL hook has received ≥1 real event.
+    // When true, Raw Input stops detecting shortcuts (LL hook handles them
+    // and can also block keystrokes for internal shortcuts).
+    static LL_HOOK_ACTIVE: AtomicBool = AtomicBool::new(false);
+
+    // Raw Input modifier tracking — separate from LL hook atomics because
+    // raw input arrives on a different thread.
+    static RAW_MOD_CTRL: AtomicBool = AtomicBool::new(false);
+    static RAW_MOD_SHIFT: AtomicBool = AtomicBool::new(false);
+    static RAW_MOD_ALT: AtomicBool = AtomicBool::new(false);
+    static RAW_MOD_GUI: AtomicBool = AtomicBool::new(false);
 
     // ── Win32 constants ──────────────────────────────────────────────
     const WH_KEYBOARD_LL: i32 = 13;
     const WM_KEYDOWN: u32 = 0x0100;
+    const WM_KEYUP: u32 = 0x0101;
     const WM_SYSKEYDOWN: u32 = 0x0104;
+    const WM_SYSKEYUP: u32 = 0x0105;
     const HC_ACTION: i32 = 0;
 
     const VK_SHIFT: i32 = 0x10;
@@ -26,7 +57,15 @@ mod windows_impl {
     const VK_LMENU: i32 = 0xA4;
     const VK_RMENU: i32 = 0xA5;
 
-    // ── Win32 types & FFI ────────────────────────────────────────────
+    // Raw Input constants
+    const WM_INPUT: u32 = 0x00FF;
+    const RID_INPUT: u32 = 0x10000003;
+    const RIM_TYPEKEYBOARD: u32 = 1;
+    const RIDEV_INPUTSINK: u32 = 0x00000100;
+    const RI_KEY_BREAK: u16 = 1;
+    const HWND_MESSAGE_PARENT: isize = -3;
+
+    // ── Win32 types ────────────────────────────────────────────────
     #[repr(C)]
     struct KBDLLHOOKSTRUCT {
         vk_code: u32,
@@ -36,6 +75,50 @@ mod windows_impl {
         _dw_extra_info: usize,
     }
 
+    #[repr(C)]
+    struct RAWINPUTDEVICE {
+        usage_page: u16,
+        usage: u16,
+        flags: u32,
+        hwnd_target: isize,
+    }
+
+    #[repr(C)]
+    struct RAWINPUTHEADER {
+        type_: u32,
+        size: u32,
+        device: isize,
+        wparam: usize,
+    }
+
+    #[repr(C)]
+    struct RAWKEYBOARD {
+        make_code: u16,
+        flags: u16,
+        reserved: u16,
+        vkey: u16,
+        message: u32,
+        extra_info: usize,
+    }
+
+    #[repr(C)]
+    struct RAWINPUT_KB {
+        header: RAWINPUTHEADER,
+        keyboard: RAWKEYBOARD,
+    }
+
+    #[repr(C)]
+    struct MSG {
+        hwnd: isize,
+        message: u32,
+        wparam: usize,
+        lparam: isize,
+        time: u32,
+        pt_x: i32,
+        pt_y: i32,
+    }
+
+    // ── Win32 FFI ──────────────────────────────────────────────────
     extern "system" {
         fn SetWindowsHookExW(
             id_hook: i32,
@@ -44,10 +127,40 @@ mod windows_impl {
             thread_id: u32,
         ) -> isize;
         fn CallNextHookEx(hhk: isize, code: i32, wparam: usize, lparam: isize) -> isize;
-        fn UnhookWindowsHookEx(hhk: isize) -> i32;
-        fn GetAsyncKeyState(vkey: i32) -> i16;
-        fn GetMessageW(msg: *mut u8, hwnd: isize, filter_min: u32, filter_max: u32) -> i32;
         fn GetModuleHandleW(module_name: *const u16) -> isize;
+        fn RegisterRawInputDevices(
+            devices: *const RAWINPUTDEVICE,
+            num: u32,
+            size: u32,
+        ) -> i32;
+        fn GetRawInputData(
+            raw_input: isize,
+            command: u32,
+            data: *mut u8,
+            size: *mut u32,
+            header_size: u32,
+        ) -> u32;
+        fn CreateWindowExW(
+            ex_style: u32,
+            class: *const u16,
+            name: *const u16,
+            style: u32,
+            x: i32,
+            y: i32,
+            w: i32,
+            h: i32,
+            parent: isize,
+            menu: isize,
+            instance: isize,
+            param: isize,
+        ) -> isize;
+        fn GetMessageW(
+            msg: *mut MSG,
+            hwnd: isize,
+            filter_min: u32,
+            filter_max: u32,
+        ) -> i32;
+        fn DispatchMessageW(msg: *const MSG) -> isize;
     }
 
     // ── Shortcut matching data ───────────────────────────────────────
@@ -77,7 +190,7 @@ mod windows_impl {
         })
     }
 
-    // ── Hook callback ────────────────────────────────────────────────
+    // ── Helpers ────────────────────────────────────────────────────
     fn is_modifier_vk(vk: u32) -> bool {
         matches!(
             vk as i32,
@@ -95,61 +208,222 @@ mod windows_impl {
         )
     }
 
-    fn is_key_down(vk: i32) -> bool {
-        unsafe { GetAsyncKeyState(vk) as u16 & 0x8000 != 0 }
-    }
-
+    // ── LL Hook callback ───────────────────────────────────────────
+    /// CRITICAL: This callback MUST return as fast as possible.
+    /// Windows silently removes the hook if it takes longer than
+    /// LowLevelHooksTimeout (~300ms). NO logging, NO mutex waits.
     unsafe extern "system" fn hook_proc(code: i32, wparam: usize, lparam: isize) -> isize {
+        // Mark LL hook as active on first real event — disables Raw Input fallback
+        if !LL_HOOK_ACTIVE.load(Ordering::Relaxed) {
+            LL_HOOK_ACTIVE.store(true, Ordering::Relaxed);
+        }
         if code == HC_ACTION {
             let msg_type = wparam as u32;
-            if msg_type == WM_KEYDOWN || msg_type == WM_SYSKEYDOWN {
+            let is_down = msg_type == WM_KEYDOWN || msg_type == WM_SYSKEYDOWN;
+            let is_up = msg_type == WM_KEYUP || msg_type == WM_SYSKEYUP;
+
+            if is_down || is_up {
                 let kb = &*(lparam as *const KBDLLHOOKSTRUCT);
-                let vk = kb.vk_code;
+                let vk = kb.vk_code as i32;
 
-                if !is_modifier_vk(vk) {
-                    let ctrl = is_key_down(VK_CONTROL);
-                    let shift = is_key_down(VK_SHIFT);
-                    let alt = is_key_down(VK_MENU);
-                    let gui = is_key_down(VK_LWIN) || is_key_down(VK_RWIN);
+                // Track modifier state from the hook itself
+                match vk {
+                    VK_CONTROL | VK_LCONTROL | VK_RCONTROL => { MOD_CTRL.store(is_down, Ordering::Relaxed); }
+                    VK_SHIFT | VK_LSHIFT | VK_RSHIFT => { MOD_SHIFT.store(is_down, Ordering::Relaxed); }
+                    VK_MENU | VK_LMENU | VK_RMENU => { MOD_ALT.store(is_down, Ordering::Relaxed); }
+                    VK_LWIN | VK_RWIN => { MOD_GUI.store(is_down, Ordering::Relaxed); }
+                    _ => {}
+                }
 
-                    // Only check if at least one modifier is held (all our shortcuts use mods)
+                // For non-modifier keydowns, check if a shortcut matches
+                if is_down && !is_modifier_vk(kb.vk_code) {
+                    let ctrl = MOD_CTRL.load(Ordering::Relaxed);
+                    let shift = MOD_SHIFT.load(Ordering::Relaxed);
+                    let alt = MOD_ALT.load(Ordering::Relaxed);
+                    let gui = MOD_GUI.load(Ordering::Relaxed);
+
                     if ctrl || shift || alt || gui {
-                        if let Ok(st) = state().try_lock() {
-                            for entry in &st.shortcuts {
-                                if entry.vk_code == vk
-                                    && entry.need_ctrl == ctrl
-                                    && entry.need_shift == shift
-                                    && entry.need_alt == alt
-                                    && entry.need_gui == gui
-                                {
-                                    info!(
-                                        "[hook] Matched vk=0x{:02X} → led={} internal={}",
-                                        vk, entry.led_idx, entry.is_internal
-                                    );
-
-                                    if let Some(ref app) = st.app_handle {
-                                        let app_clone = app.clone();
-                                        let led_idx = entry.led_idx;
-                                        // Toggle on a separate thread to avoid blocking the hook
-                                        std::thread::spawn(move || {
-                                            crate::do_toggle_key(&app_clone, led_idx);
-                                        });
+                        match state().try_lock() {
+                            Ok(st) => {
+                                for entry in &st.shortcuts {
+                                    if entry.vk_code == kb.vk_code
+                                        && entry.need_ctrl == ctrl
+                                        && entry.need_shift == shift
+                                        && entry.need_alt == alt
+                                        && entry.need_gui == gui
+                                    {
+                                        if let Some(ref app) = st.app_handle {
+                                            let app_clone = app.clone();
+                                            let led_idx = entry.led_idx;
+                                            let is_internal = entry.is_internal;
+                                            std::thread::spawn(move || {
+                                                crate::do_toggle_key(&app_clone, led_idx);
+                                            });
+                                            if is_internal {
+                                                return 1;
+                                            }
+                                        }
+                                        break;
                                     }
-
-                                    if entry.is_internal {
-                                        // Consume internal keycodes — don't let the OS process them
-                                        return 1;
-                                    }
-                                    // User shortcuts: let the keystroke propagate naturally
-                                    break;
                                 }
                             }
+                            Err(_) => {}
                         }
                     }
                 }
             }
         }
         CallNextHookEx(0, code, wparam, lparam)
+    }
+
+    // ── Raw Input API (immediate shortcut detection) ──────────────────
+    // The LL keyboard hook has an activation delay: Windows doesn't dispatch
+    // events to it until the user physically interacts with the desktop.
+    // Raw Input with RIDEV_INPUTSINK works immediately. Once the LL hook
+    // activates, Raw Input stops processing (LL hook takes over so it can
+    // also block keystrokes for internal shortcuts).
+
+    fn start_raw_input_thread() {
+        std::thread::spawn(|| {
+            unsafe {
+                let hmod = GetModuleHandleW(std::ptr::null());
+
+                // Create a message-only window to receive WM_INPUT
+                let class: Vec<u16> = "Static\0".encode_utf16().collect();
+                let hwnd = CreateWindowExW(
+                    0,
+                    class.as_ptr(),
+                    std::ptr::null(),
+                    0,
+                    0, 0, 0, 0,
+                    HWND_MESSAGE_PARENT,
+                    0,
+                    hmod,
+                    0,
+                );
+                if hwnd == 0 {
+                    error!("[raw-input] Failed to create window");
+                    return;
+                }
+
+                // Register for keyboard raw input with INPUTSINK (receives even when not focused)
+                let rid = RAWINPUTDEVICE {
+                    usage_page: 0x01, // Generic Desktop Controls
+                    usage: 0x06,      // Keyboard
+                    flags: RIDEV_INPUTSINK,
+                    hwnd_target: hwnd,
+                };
+                let ret = RegisterRawInputDevices(
+                    &rid,
+                    1,
+                    std::mem::size_of::<RAWINPUTDEVICE>() as u32,
+                );
+                if ret == 0 {
+                    error!("[raw-input] RegisterRawInputDevices failed");
+                    return;
+                }
+
+                info!("[raw-input] Listening for keyboard input");
+
+                let mut msg: MSG = std::mem::zeroed();
+                loop {
+                    let ret = GetMessageW(&mut msg, 0, 0, 0);
+                    if ret <= 0 {
+                        break;
+                    }
+                    if msg.message == WM_INPUT {
+                        handle_raw_input_event(msg.lparam);
+                    }
+                    DispatchMessageW(&msg);
+                }
+            }
+        });
+    }
+
+    unsafe fn handle_raw_input_event(lparam: isize) {
+        // Once the LL hook is active, let it handle everything
+        if LL_HOOK_ACTIVE.load(Ordering::Relaxed) {
+            return;
+        }
+
+        let header_size = std::mem::size_of::<RAWINPUTHEADER>() as u32;
+        let mut size: u32 = 0;
+        GetRawInputData(lparam, RID_INPUT, std::ptr::null_mut(), &mut size, header_size);
+
+        if size == 0 || size as usize > std::mem::size_of::<RAWINPUT_KB>() * 2 {
+            return;
+        }
+
+        let mut buf = [0u8; 256];
+        let copied = GetRawInputData(
+            lparam,
+            RID_INPUT,
+            buf.as_mut_ptr(),
+            &mut size,
+            header_size,
+        );
+        if copied == u32::MAX {
+            return;
+        }
+
+        let raw = &*(buf.as_ptr() as *const RAWINPUT_KB);
+        if raw.header.type_ != RIM_TYPEKEYBOARD {
+            return;
+        }
+
+        let vk = raw.keyboard.vkey as u32;
+        let is_up = raw.keyboard.flags & RI_KEY_BREAK != 0;
+        let is_down = !is_up;
+
+        // Track modifier state
+        match vk as i32 {
+            VK_CONTROL | VK_LCONTROL | VK_RCONTROL => {
+                RAW_MOD_CTRL.store(is_down, Ordering::Relaxed);
+            }
+            VK_SHIFT | VK_LSHIFT | VK_RSHIFT => {
+                RAW_MOD_SHIFT.store(is_down, Ordering::Relaxed);
+            }
+            VK_MENU | VK_LMENU | VK_RMENU => {
+                RAW_MOD_ALT.store(is_down, Ordering::Relaxed);
+            }
+            VK_LWIN | VK_RWIN => {
+                RAW_MOD_GUI.store(is_down, Ordering::Relaxed);
+            }
+            _ => {}
+        }
+
+        // For non-modifier keydowns, check if a shortcut matches
+        if is_down && !is_modifier_vk(vk) {
+            let ctrl = RAW_MOD_CTRL.load(Ordering::Relaxed);
+            let shift = RAW_MOD_SHIFT.load(Ordering::Relaxed);
+            let alt = RAW_MOD_ALT.load(Ordering::Relaxed);
+            let gui = RAW_MOD_GUI.load(Ordering::Relaxed);
+
+            if ctrl || shift || alt || gui {
+                match state().try_lock() {
+                    Ok(st) => {
+                        for entry in &st.shortcuts {
+                            if entry.vk_code == vk
+                                && entry.need_ctrl == ctrl
+                                && entry.need_shift == shift
+                                && entry.need_alt == alt
+                                && entry.need_gui == gui
+                            {
+                                if let Some(ref app) = st.app_handle {
+                                    let app_clone = app.clone();
+                                    let led_idx = entry.led_idx;
+                                    std::thread::spawn(move || {
+                                        crate::do_toggle_key(&app_clone, led_idx);
+                                    });
+                                }
+                                break;
+                            }
+                        }
+                    }
+                    Err(_) => {}
+                }
+            }
+        }
     }
 
     // ── QMK → Windows VK mapping ────────────────────────────────────
@@ -168,6 +442,29 @@ mod windows_impl {
     }
 
     // ── Public API ──────────────────────────────────────────────────
+
+    /// Install the LL keyboard hook on the main thread and start the
+    /// Raw Input listener thread. The LL hook needs Tauri's event loop
+    /// as its message pump; Raw Input has its own dedicated pump.
+    pub fn init() {
+        static HOOK_INSTALLED: OnceLock<()> = OnceLock::new();
+        HOOK_INSTALLED.get_or_init(|| {
+            unsafe {
+                let hmod = GetModuleHandleW(std::ptr::null());
+                let hook = SetWindowsHookExW(WH_KEYBOARD_LL, hook_proc, hmod, 0);
+                if hook == 0 {
+                    error!("[hook] Failed to install keyboard hook");
+                } else {
+                    info!("[hook] Keyboard LL hook installed (main thread)");
+                }
+            }
+
+            // Start Raw Input thread — works immediately, no activation delay
+            start_raw_input_thread();
+        });
+    }
+
+    /// Update the shortcut entries (called when device connects or keymaps change).
     pub fn register_shortcuts(app: &tauri::AppHandle, keymaps: &[u16; 8]) {
         let mut entries = Vec::new();
 
@@ -175,22 +472,12 @@ mod windows_impl {
             let mods = (keycode >> 8) as u8;
             let basic = (keycode & 0xFF) as u8;
             if mods == 0 || basic == 0 {
-                info!("[hook] keymap={} keycode=0x{:04X} → not mappable", i, keycode);
                 continue;
             }
 
             if let Some(vk) = qmk_basic_to_vk(basic) {
                 let led_idx = crate::keymap_to_led_index(i);
                 let is_internal = crate::is_internal_keycode(keycode);
-
-                info!(
-                    "[hook] keymap={} → led={} vk=0x{:02X} ctrl={} shift={} alt={} gui={} internal={}",
-                    i, led_idx, vk,
-                    mods & 0x11 != 0, mods & 0x22 != 0,
-                    mods & 0x44 != 0, mods & 0x88 != 0,
-                    is_internal,
-                );
-
                 entries.push(ShortcutEntry {
                     vk_code: vk,
                     need_ctrl: mods & 0x11 != 0,
@@ -200,8 +487,6 @@ mod windows_impl {
                     led_idx,
                     is_internal,
                 });
-            } else {
-                info!("[hook] keymap={} keycode=0x{:04X} → VK not mappable", i, keycode);
             }
         }
 
@@ -211,34 +496,16 @@ mod windows_impl {
         st.app_handle = Some(app.clone());
         drop(st);
 
-        // Install the hook on a dedicated thread with its own message pump (only once)
-        static HOOK_STARTED: OnceLock<()> = OnceLock::new();
-        HOOK_STARTED.get_or_init(|| {
-            std::thread::spawn(|| unsafe {
-                // GetModuleHandleW(null) = handle to the current exe — required for global hooks
-                let hmod = GetModuleHandleW(std::ptr::null());
-                let hook = SetWindowsHookExW(WH_KEYBOARD_LL, hook_proc, hmod, 0);
-                if hook == 0 {
-                    error!("[hook] Failed to install keyboard hook (hmod=0x{:X})", hmod);
-                    return;
-                }
-                info!("[hook] Low-level keyboard hook installed (hmod=0x{:X})", hmod);
-
-                // Message pump — required for WH_KEYBOARD_LL to receive events
-                let mut msg_buf = [0u8; 64];
-                while GetMessageW(msg_buf.as_mut_ptr(), 0, 0, 0) > 0 {}
-
-                UnhookWindowsHookEx(hook);
-            });
-        });
-
-        info!("[hook] {} shortcuts registered via keyboard hook", count);
+        info!("[hook] {} shortcuts registered", count);
     }
 }
 
 #[cfg(target_os = "windows")]
-pub use windows_impl::register_shortcuts;
+pub use windows_impl::{init, register_shortcuts};
 
-// Non-Windows stub — shortcuts handled by tauri_plugin_global_shortcut in lib.rs
+// Non-Windows stubs — shortcuts handled by tauri_plugin_global_shortcut in lib.rs
+#[cfg(not(target_os = "windows"))]
+pub fn init() {}
+
 #[cfg(not(target_os = "windows"))]
 pub fn register_shortcuts(_app: &tauri::AppHandle, _keymaps: &[u16; 8]) {}

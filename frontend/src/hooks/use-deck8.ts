@@ -68,6 +68,7 @@ const DEFAULT_DEVICES: AudioDeviceList = {
 
 export function useDeck8() {
   const [state, setState] = useState<StateSnapshot>(DEFAULT_STATE);
+  const [connecting, setConnecting] = useState(false);
   const [selectedKey, setSelectedKey] = useState<number | null>(null);
   const [audioDevices, setAudioDevices] = useState<AudioDeviceList>(DEFAULT_DEVICES);
   const colorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -90,6 +91,7 @@ export function useDeck8() {
   const connect = useCallback(
     async (silent = false) => {
       try {
+        setConnecting(true);
         const ok = await connectDevice();
         if (ok) {
           toast.success("Device connected");
@@ -99,6 +101,8 @@ export function useDeck8() {
         await refreshState();
       } catch (e) {
         if (!silent) toast.error(`Connection error: ${e}`);
+      } finally {
+        setConnecting(false);
       }
     },
     [refreshState],
@@ -537,6 +541,7 @@ export function useDeck8() {
 
   return {
     state,
+    connecting,
     selectedKey,
     setSelectedKey,
     connect: () => connect(false),
