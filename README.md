@@ -9,9 +9,11 @@ Built with [Tauri v2](https://tauri.app) (Rust backend) + React + Tailwind CSS +
 - **Key assignment** — remap any of the 8 keys to keyboard shortcuts (modifier + key combos)
 - **Per-key color control** — set individual HSV colors with slot A/B toggle via global shortcuts
 - **RGB matrix settings** — adjust brightness, effect, speed, and base color
-- **Keystroke passthrough** — global shortcuts toggle LED colors and replay the keystroke to the focused app
+- **Keystroke passthrough** — low-level keyboard hook (Windows) or global shortcuts (macOS) toggle LED colors while letting the keystroke reach all apps
+- **Soundboard** — unlimited sound library with per-key assignment, Discord-style upload with trim/preview
+- **Audio pipeline** — mic passthrough + sound injection via ring buffer to virtual cable for Discord/voice chat
 - **System tray** — minimizes to tray, auto-connects on launch
-- **Session persistence** — key colors survive app restarts
+- **Session persistence** — key colors and sound assignments survive app restarts
 
 ## Prerequisites
 
@@ -70,11 +72,13 @@ deck8-hub/
 │       └── lib/              # tauri.ts (IPC), keycodes, utils
 └── src-tauri/                # Rust backend
     └── src/
-        ├── lib.rs            # Tauri commands, shortcuts, keystroke replay
+        ├── lib.rs            # Tauri commands, shortcut registration
         ├── hid.rs            # HID communication with Deck-8
         ├── protocol.rs       # VIA/QMK protocol constants and types
         ├── profile.rs        # Session state persistence
-        └── state.rs          # App state types (KeyConfig, StateSnapshot)
+        ├── state.rs          # App state types (KeyConfig, AudioConfig, StateSnapshot)
+        ├── audio.rs          # Audio pipeline (mic + sound injection)
+        └── keyboard_hook.rs  # Windows low-level keyboard hook
 ```
 
 ## Hardware
