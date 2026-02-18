@@ -1,5 +1,6 @@
 mod audio;
 mod hid;
+mod keyboard_hook;
 mod profile;
 mod protocol;
 mod state;
@@ -22,6 +23,7 @@ use tauri::{
 /// Convert a QMK keycode (modifier+basic) to a Tauri global shortcut string.
 /// Returns None if the keycode can't be represented as a shortcut.
 /// Uses the Tauri/global_hotkey Display format: "Ctrl+Alt+M" for registration.
+#[allow(dead_code)]
 fn qmk_keycode_to_shortcut(keycode: u16) -> Option<String> {
     let mods = (keycode >> 8) as u8;
     let basic = (keycode & 0xFF) as u8;
@@ -59,6 +61,7 @@ fn qmk_keycode_to_shortcut(keycode: u16) -> Option<String> {
 /// Convert a QMK keycode to the Display format used by Tauri's Shortcut type.
 /// This is the format returned by `format!("{}", shortcut)` in the handler.
 /// Example: "control+alt+KeyM" (lowercase modifiers, "Key" prefix for letters)
+#[allow(dead_code)]
 fn qmk_keycode_to_display(keycode: u16) -> Option<String> {
     let mods = (keycode >> 8) as u8;
     let basic = (keycode & 0xFF) as u8;
@@ -92,6 +95,8 @@ fn qmk_keycode_to_display(keycode: u16) -> Option<String> {
 
 /// Simulate a QMK keycode as a real keystroke via enigo.
 /// This replays the shortcut to the OS so the focused application receives it.
+/// Only used on macOS — on Windows the low-level hook lets keystrokes propagate naturally.
+#[allow(dead_code)]
 fn simulate_qmk_keystroke(keycode: u16) {
     use enigo::{Direction, Enigo, Key, Keyboard, Settings};
 
@@ -157,41 +162,54 @@ fn keymap_to_led_index(keymap_idx: usize) -> usize {
 }
 
 /// Register per-key global shortcuts based on actual device keymaps.
+/// On Windows: uses a low-level keyboard hook (coexists with apps like Wispr Flow).
+/// On macOS: uses tauri_plugin_global_shortcut (RegisterHotKey equivalent).
 fn register_key_shortcuts(app: &AppHandle, keymaps: &[u16; 8]) {
-    use tauri_plugin_global_shortcut::GlobalShortcutExt;
-
-    // Unregister any previous shortcuts
-    if let Err(e) = app.global_shortcut().unregister_all() {
-        warn!("[shortcuts] Failed to unregister old shortcuts: {}", e);
+    // Windows: low-level keyboard hook — keystroke propagates naturally, no replay needed
+    #[cfg(target_os = "windows")]
+    {
+        use tauri_plugin_global_shortcut::GlobalShortcutExt;
+        // Ensure no plugin-based shortcuts are registered (hook handles everything)
+        let _ = app.global_shortcut().unregister_all();
+        keyboard_hook::register_shortcuts(app, keymaps);
     }
 
-    let state = app.state::<SharedState>();
-    let mut st = state.lock().unwrap();
-    st.shortcut_map.clear();
+    // macOS: use tauri_plugin_global_shortcut with unregister→replay→re-register dance
+    #[cfg(not(target_os = "windows"))]
+    {
+        use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
-    for (i, &keycode) in keymaps.iter().enumerate() {
-        if let Some(shortcut_str) = qmk_keycode_to_shortcut(keycode) {
-            let display_str = qmk_keycode_to_display(keycode).unwrap_or_default();
-            // Map keymap index → LED index (accounts for snake wiring on bottom row)
-            let led_idx = keymap_to_led_index(i);
-            info!("[shortcuts] keymap={} → led={} keycode=0x{:04X} → \"{}\"",
-                  i, led_idx, keycode, shortcut_str);
-            match app.global_shortcut().register(shortcut_str.as_str()) {
-                Ok(_) => {
-                    st.shortcut_map.insert(
-                        display_str,
-                        (led_idx, keycode, shortcut_str.clone()),
-                    );
-                }
-                Err(e) => {
-                    error!("[shortcuts] keymap={} register failed: {}", i, e);
-                }
-            }
-        } else {
-            info!("[shortcuts] keymap={} keycode=0x{:04X} → not mappable", i, keycode);
+        if let Err(e) = app.global_shortcut().unregister_all() {
+            warn!("[shortcuts] Failed to unregister old shortcuts: {}", e);
         }
+
+        let state = app.state::<SharedState>();
+        let mut st = state.lock().unwrap();
+        st.shortcut_map.clear();
+
+        for (i, &keycode) in keymaps.iter().enumerate() {
+            if let Some(shortcut_str) = qmk_keycode_to_shortcut(keycode) {
+                let display_str = qmk_keycode_to_display(keycode).unwrap_or_default();
+                let led_idx = keymap_to_led_index(i);
+                info!("[shortcuts] keymap={} → led={} keycode=0x{:04X} → \"{}\"",
+                      i, led_idx, keycode, shortcut_str);
+                match app.global_shortcut().register(shortcut_str.as_str()) {
+                    Ok(_) => {
+                        st.shortcut_map.insert(
+                            display_str,
+                            (led_idx, keycode, shortcut_str.clone()),
+                        );
+                    }
+                    Err(e) => {
+                        error!("[shortcuts] keymap={} register failed: {}", i, e);
+                    }
+                }
+            } else {
+                info!("[shortcuts] keymap={} keycode=0x{:04X} → not mappable", i, keycode);
+            }
+        }
+        info!("[shortcuts] Registered {} per-key shortcuts", st.shortcut_map.len());
     }
-    info!("[shortcuts] Registered {} per-key shortcuts", st.shortcut_map.len());
 }
 
 // ── Internal keycodes for sound-only keys ───────────────────────────────
