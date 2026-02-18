@@ -196,10 +196,12 @@ fn register_key_shortcuts(app: &AppHandle, keymaps: &[u16; 8]) {
 
 // ── Internal keycodes for sound-only keys ───────────────────────────────
 
-/// Internal keycodes: Ctrl+Alt+Shift + {1..8} (0x071E..0x0725).
+/// Internal keycodes: Ctrl+Shift+Alt+GUI + F13..F20 (0x0F68..0x0F6F).
 /// Auto-assigned when a key has a sound but no user-set keycode.
 /// The shortcut handler skips keystroke replay for these.
-const INTERNAL_KEYCODE_BASE: u16 = 0x071E; // Ctrl+Alt+Shift+1
+/// NOTE: Must NOT overlap with any user-assignable shortcut range.
+/// The old range (0x071E = Ctrl+Shift+Alt+1) collided with user shortcuts.
+const INTERNAL_KEYCODE_BASE: u16 = 0x0F68; // Ctrl+Shift+Alt+GUI+F13
 
 fn internal_keycode_for_key(led_index: usize) -> u16 {
     INTERNAL_KEYCODE_BASE + led_index as u16
@@ -207,6 +209,12 @@ fn internal_keycode_for_key(led_index: usize) -> u16 {
 
 fn is_internal_keycode(keycode: u16) -> bool {
     keycode >= INTERNAL_KEYCODE_BASE && keycode < INTERNAL_KEYCODE_BASE + 8
+}
+
+/// Old internal keycode range that collided with user shortcuts.
+const OLD_INTERNAL_BASE: u16 = 0x071E; // Ctrl+Shift+Alt+1
+fn is_old_internal_keycode(keycode: u16) -> bool {
+    keycode >= OLD_INTERNAL_BASE && keycode < OLD_INTERNAL_BASE + 8
 }
 
 /// Convert LED index to keymap/matrix index (inverse of keymap_to_led_index).
@@ -287,6 +295,23 @@ fn connect_device(app: AppHandle, state: State<SharedState>) -> bool {
                 info!("[connect] Saving clean state to EEPROM...");
                 if let Err(e) = dev.custom_save() {
                     error!("[connect] custom_save FAILED: {:#}", e);
+                }
+            }
+            // Migrate old internal keycodes (0x071E range) to new range (0x0F68)
+            for km_idx in 0..8 {
+                let kc = s.keymaps[km_idx];
+                if is_old_internal_keycode(kc) {
+                    let led_idx = keymap_to_led_index(km_idx);
+                    let new_kc = internal_keycode_for_key(led_idx);
+                    if let Some(ref dev) = s.device {
+                        let (row, col) = protocol::key_index_to_matrix(km_idx as u8);
+                        if let Err(e) = dev.set_keycode(0, row, col, new_kc) {
+                            error!("[sound] Failed to migrate internal keycode: {}", e);
+                        }
+                    }
+                    s.keymaps[km_idx] = new_kc;
+                    info!("[sound] Migrated old internal keycode 0x{:04X} → 0x{:04X} for LED {} (keymap {})",
+                          kc, new_kc, led_idx, km_idx);
                 }
             }
             // Auto-assign internal keycodes for keys with sounds but no keycode

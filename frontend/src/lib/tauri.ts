@@ -69,10 +69,10 @@ export interface StateSnapshot {
 }
 
 // ── Internal keycode detection ──────────────────────────────────────
-// Internal keycodes (Ctrl+Alt+Shift+1..8 = 0x071E..0x0725) are auto-assigned
+// Internal keycodes (Ctrl+Shift+Alt+GUI+F13..F20 = 0x0F68..0x0F6F) are auto-assigned
 // to keys that have a sound but no user-set shortcut. They should be hidden
 // from the UI since the user didn't set them.
-const INTERNAL_KEYCODE_BASE = 0x071e;
+const INTERNAL_KEYCODE_BASE = 0x0f68;
 export function isInternalKeycode(keycode: number): boolean {
   return keycode >= INTERNAL_KEYCODE_BASE && keycode < INTERNAL_KEYCODE_BASE + 8;
 }
