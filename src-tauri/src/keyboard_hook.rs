@@ -1,4 +1,4 @@
-// Windows keyboard shortcut interception using two mechanisms:
+// Windows keyboard shortcut interception using two mechanisms running in parallel:
 //
 // 1. **Raw Input API** (RIDEV_INPUTSINK): Works immediately — no activation
 //    delay. Detects shortcuts from the Deck-8 as soon as the app starts.
@@ -6,14 +6,16 @@
 //
 // 2. **WH_KEYBOARD_LL hook** (low-level): Installed on the main/UI thread.
 //    Has a Windows limitation: doesn't receive events until the user
-//    physically interacts with the desktop. Once active, it takes over
-//    from Raw Input because it can also BLOCK keystrokes (return 1) for
-//    internal shortcuts. Coexists with other apps using hooks (e.g. Wispr Flow).
+//    physically interacts with the desktop. Can BLOCK keystrokes (return 1)
+//    for internal shortcuts. Coexists with other apps using hooks (e.g. Wispr Flow).
+//
+// Both mechanisms always run. A per-key timestamp dedup (DEDUP_MS) prevents
+// double-firing when both detect the same keystroke.
 
 #[cfg(target_os = "windows")]
 mod windows_impl {
     use log::{error, info};
-    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
     use std::sync::{Mutex, OnceLock};
 
     // Tracked modifier state for the LL hook (main thread).
@@ -25,10 +27,14 @@ mod windows_impl {
     static MOD_ALT: AtomicBool = AtomicBool::new(false);
     static MOD_GUI: AtomicBool = AtomicBool::new(false);
 
-    // True once the LL hook has received ≥1 real event.
-    // When true, Raw Input stops detecting shortcuts (LL hook handles them
-    // and can also block keystrokes for internal shortcuts).
-    static LL_HOOK_ACTIVE: AtomicBool = AtomicBool::new(false);
+    // Dedup: per-key timestamp of the last toggle, to avoid double-firing
+    // when both LL hook and Raw Input detect the same keystroke.
+    // Value is GetTickCount64() in milliseconds.
+    const DEDUP_MS: u64 = 150;
+    static LAST_TOGGLE: [AtomicU64; 8] = [
+        AtomicU64::new(0), AtomicU64::new(0), AtomicU64::new(0), AtomicU64::new(0),
+        AtomicU64::new(0), AtomicU64::new(0), AtomicU64::new(0), AtomicU64::new(0),
+    ];
 
     // Raw Input modifier tracking — separate from LL hook atomics because
     // raw input arrives on a different thread.
@@ -161,6 +167,7 @@ mod windows_impl {
             filter_max: u32,
         ) -> i32;
         fn DispatchMessageW(msg: *const MSG) -> isize;
+        fn GetTickCount64() -> u64;
     }
 
     // ── Shortcut matching data ───────────────────────────────────────
@@ -208,15 +215,21 @@ mod windows_impl {
         )
     }
 
+    /// Returns true if this key should be toggled (not a duplicate within DEDUP_MS).
+    fn should_toggle(led_idx: usize) -> bool {
+        if led_idx >= 8 {
+            return false;
+        }
+        let now = unsafe { GetTickCount64() };
+        let prev = LAST_TOGGLE[led_idx].swap(now, Ordering::Relaxed);
+        now.wrapping_sub(prev) > DEDUP_MS
+    }
+
     // ── LL Hook callback ───────────────────────────────────────────
     /// CRITICAL: This callback MUST return as fast as possible.
     /// Windows silently removes the hook if it takes longer than
     /// LowLevelHooksTimeout (~300ms). NO logging, NO mutex waits.
     unsafe extern "system" fn hook_proc(code: i32, wparam: usize, lparam: isize) -> isize {
-        // Mark LL hook as active on first real event — disables Raw Input fallback
-        if !LL_HOOK_ACTIVE.load(Ordering::Relaxed) {
-            LL_HOOK_ACTIVE.store(true, Ordering::Relaxed);
-        }
         if code == HC_ACTION {
             let msg_type = wparam as u32;
             let is_down = msg_type == WM_KEYDOWN || msg_type == WM_SYSKEYDOWN;
@@ -252,16 +265,18 @@ mod windows_impl {
                                         && entry.need_alt == alt
                                         && entry.need_gui == gui
                                     {
-                                        if let Some(ref app) = st.app_handle {
-                                            let app_clone = app.clone();
-                                            let led_idx = entry.led_idx;
-                                            let is_internal = entry.is_internal;
-                                            std::thread::spawn(move || {
-                                                crate::do_toggle_key(&app_clone, led_idx);
-                                            });
-                                            if is_internal {
-                                                return 1;
+                                        let led_idx = entry.led_idx;
+                                        let is_internal = entry.is_internal;
+                                        if should_toggle(led_idx) {
+                                            if let Some(ref app) = st.app_handle {
+                                                let app_clone = app.clone();
+                                                std::thread::spawn(move || {
+                                                    crate::do_toggle_key(&app_clone, led_idx);
+                                                });
                                             }
+                                        }
+                                        if is_internal {
+                                            return 1;
                                         }
                                         break;
                                     }
@@ -279,9 +294,8 @@ mod windows_impl {
     // ── Raw Input API (immediate shortcut detection) ──────────────────
     // The LL keyboard hook has an activation delay: Windows doesn't dispatch
     // events to it until the user physically interacts with the desktop.
-    // Raw Input with RIDEV_INPUTSINK works immediately. Once the LL hook
-    // activates, Raw Input stops processing (LL hook takes over so it can
-    // also block keystrokes for internal shortcuts).
+    // Raw Input with RIDEV_INPUTSINK works immediately. Both mechanisms
+    // always run in parallel; per-key timestamp dedup prevents double-firing.
 
     fn start_raw_input_thread() {
         std::thread::spawn(|| {
@@ -341,11 +355,6 @@ mod windows_impl {
     }
 
     unsafe fn handle_raw_input_event(lparam: isize) {
-        // Once the LL hook is active, let it handle everything
-        if LL_HOOK_ACTIVE.load(Ordering::Relaxed) {
-            return;
-        }
-
         let header_size = std::mem::size_of::<RAWINPUTHEADER>() as u32;
         let mut size: u32 = 0;
         GetRawInputData(lparam, RID_INPUT, std::ptr::null_mut(), &mut size, header_size);
@@ -409,12 +418,14 @@ mod windows_impl {
                                 && entry.need_alt == alt
                                 && entry.need_gui == gui
                             {
-                                if let Some(ref app) = st.app_handle {
-                                    let app_clone = app.clone();
-                                    let led_idx = entry.led_idx;
-                                    std::thread::spawn(move || {
-                                        crate::do_toggle_key(&app_clone, led_idx);
-                                    });
+                                let led_idx = entry.led_idx;
+                                if should_toggle(led_idx) {
+                                    if let Some(ref app) = st.app_handle {
+                                        let app_clone = app.clone();
+                                        std::thread::spawn(move || {
+                                            crate::do_toggle_key(&app_clone, led_idx);
+                                        });
+                                    }
                                 }
                                 break;
                             }
